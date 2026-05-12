@@ -1,0 +1,30 @@
+atc_level1,atc_level3,name_en,name_kr,feature_flag_name,use_case
+A,A02B,Drugs for peptic ulcer,위산분비억제제,has_ppi,위장약 사용
+A,A04A,Antiemetics,항구토제,has_antiemetic,항암 보조 또는 만성 구토
+A,A10A,Insulins,인슐린,has_insulin,당뇨 중증도 지표
+A,A10B,Oral antidiabetics,경구 혈당강하제,has_oad,당뇨 약제 사용
+A,A11D,Vitamin B1,비타민 B1,has_b1_supplement,영양 보충
+B,B01A,Antithrombotic agents,항혈전제,has_antithrombotic,심혈관 위험
+B,B01AC06,Aspirin,아스피린,has_aspirin,심혈관 1차 예방
+B,B01AF,Direct factor Xa inhibitors,DOAC,has_doac,심방세동/VTE
+C,C01D,Vasodilators in cardiac diseases,심혈관확장제,has_cardiac_vasodilator,협심증
+C,C03,Diuretics,이뇨제,has_diuretic,심부전/고혈압
+C,C07,Beta blocking agents,베타차단제,has_betablocker,심혈관/고혈압
+C,C08,Calcium channel blockers,칼슘차단제,has_ccb,고혈압
+C,C09,ACE/ARB,RAAS 차단제,has_arb_acei,고혈압/심부전/CKD
+C,C10AA,Statins,스타틴,has_statin,이상지질혈증
+H,H02A,Corticosteroids systemic,전신 스테로이드,has_systemic_steroid,자가면역/염증
+J,J01,Antibacterials,항생제,has_antibiotic_30d,최근 감염
+L,L01,Antineoplastic agents,항암제,has_chemo,암 치료
+L,L01XC,Monoclonal antibodies,단클론항체,has_mab,표적 치료
+L,L04,Immunosuppressants,면역억제제,has_immunosuppressant,장기이식/자가면역
+M,M01A,NSAIDs,비스테로이드 항염증제,has_nsaid,통증/염증
+N,N02A,Opioids,오피오이드,has_opioid,중증 통증/암성통증
+N,N03,Antiepileptics,항경련제,has_antiepileptic,뇌전증/신경통
+N,N05A,Antipsychotics,항정신병약,has_antipsychotic,정신과
+N,N05B,Anxiolytics,항불안제,has_anxiolytic,불안/수면
+N,N06A,Antidepressants,항우울제,has_antidepressant,우울/공황
+N,N06D,Anti-dementia drugs,항치매약,has_antidementia,치매
+R,R03,Drugs for obstructive airway diseases,호흡기 약제,has_asthma_drug,천식/COPD
+R,R03AK,ICS+LABA,흡입 스테로이드+LABA,has_ics_laba,중증 천식
+R,R06,Antihistamines,항히스타민제,has_antihistamine,알레르기

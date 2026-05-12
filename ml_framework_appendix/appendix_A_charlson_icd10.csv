@@ -1,0 +1,18 @@
+condition_name,icd10_pattern,charlson_weight,clinical_description
+myocardial_infarction,"I21,I22,I25.2",1,급성 심근경색 + 진구성 심근경색
+congestive_heart_failure,I50,1,울혈성 심부전
+peripheral_vascular_disease,"I70,I71,I73.1,I73.8,I73.9,I77.1,I79.0,I79.2,K55.1,K55.8,K55.9,Z95.8,Z95.9",1,말초혈관질환
+cerebrovascular_disease,"G45,G46,H34.0,I60-I69",1,뇌혈관질환 (TIA 포함)
+dementia,"F00-F03,F05.1,G30,G31.1",1,치매
+chronic_pulmonary_disease,"I27.8,I27.9,J40-J47,J60-J67,J68.4,J70.1,J70.3",1,만성 호흡기 질환 (COPD, 천식 등)
+rheumatic_disease,"M05,M06,M31.5,M32-M34,M35.1,M35.3,M36.0",1,류마티스 질환
+peptic_ulcer_disease,K25-K28,1,소화성 궤양
+mild_liver_disease,"B18,K70.0-K70.3,K70.9,K71.3-K71.5,K71.7,K73,K74,K76.0,K76.2-K76.4,K76.8,K76.9,Z94.4",1,경증 간질환
+diabetes_without_complications,"E10.0,E10.1,E10.6,E10.8,E10.9,E11.0,E11.1,E11.6,E11.8,E11.9,E12.0,E12.1,E12.6,E12.8,E12.9,E13.0,E13.1,E13.6,E13.8,E13.9,E14.0,E14.1,E14.6,E14.8,E14.9",1,당뇨 (합병증 없음)
+diabetes_with_complications,"E10.2-E10.5,E10.7,E11.2-E11.5,E11.7,E12.2-E12.5,E12.7,E13.2-E13.5,E13.7,E14.2-E14.5,E14.7",2,당뇨 (합병증 동반)
+hemiplegia_or_paraplegia,"G04.1,G11.4,G80.1,G80.2,G81,G82,G83.0-G83.4,G83.9",2,편마비/하반신마비
+renal_disease,"I12.0,I13.1,N03.2-N03.7,N05.2-N05.7,N18,N19,N25.0,Z49.0-Z49.2,Z94.0,Z99.2",2,중증도 이상 신질환
+any_malignancy,"C00-C26,C30-C34,C37-C41,C43,C45-C58,C60-C76,C81-C85,C88,C90-C97",2,악성 종양 (전이 제외)
+moderate_severe_liver_disease,"I85.0,I85.9,I86.4,I98.2,K70.4,K71.1,K72.1,K72.9,K76.5,K76.6,K76.7",3,중증 간질환 (간성뇌증 포함)
+metastatic_solid_tumor,C77-C80,6,전이성 고형암
+aids_hiv,B20-B24,6,AIDS / HIV
