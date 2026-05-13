@@ -387,6 +387,56 @@ export const TOOLBOX_MODULES = [
     icon: CalculatorIcon,
     description: "Combines two loss models and calculates VaR and other risk metrics.",
   },
+  // JMDC Analysis (PRD v2.0 §17, J1~J7)
+  {
+    type: ModuleType.JMDCCohortBuilder,
+    name: "JMDC Cohort Builder",
+    icon: UsersIcon,
+    description:
+      "[J1] Defines an analysis cohort by Index Date with washout, age, exclusion, and disease-free conditions. Supports synthetic data generation for offline demos.",
+  },
+  {
+    type: ModuleType.JMDCOutcomeLabeler,
+    name: "JMDC Outcome Labeler",
+    icon: ChartCurveIcon,
+    description:
+      "[J2] Computes first-event time and censoring per member for one or many outcomes (ICD-10 prefix dictionary).",
+  },
+  {
+    type: ModuleType.JMDCIncidenceRate,
+    name: "JMDC Incidence Rate",
+    icon: CalculatorIcon,
+    description:
+      "[J3] Person-years based crude and age-standardised incidence rates with optional stratification.",
+  },
+  {
+    type: ModuleType.JMDCSurvivalCompare,
+    name: "JMDC Survival Compare (KM)",
+    icon: ChartCurveIcon,
+    description:
+      "[J4] Kaplan-Meier survival curves with log-rank (and stratified log-rank) tests between groups.",
+  },
+  {
+    type: ModuleType.JMDCCumulativeIncidence,
+    name: "JMDC Cumulative Incidence",
+    icon: ChartCurveIcon,
+    description:
+      "[J5] Cumulative incidence function with optional competing-risk handling (Aalen-Johansen).",
+  },
+  {
+    type: ModuleType.JMDCRiskStratification,
+    name: "JMDC Risk Stratification (Cox)",
+    icon: CalculatorIcon,
+    description:
+      "[J6] Adjusted hazard ratios from Cox PH with proportional hazards assumption check (Schoenfeld).",
+  },
+  {
+    type: ModuleType.JMDCKRJPMatcher,
+    name: "JMDC KR-JP Matcher",
+    icon: UsersIcon,
+    description:
+      "[J7] 4-Layer KR-JP cohort matching (schema alignment, vocab mapping, age/sex standardisation, PSM).",
+  },
 ];
 
 // fix: Replaced all instances of status: 'Pending' with status: ModuleStatus.Pending to conform to the ModuleStatus enum type.
@@ -999,6 +1049,121 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
         { name: "loss_in", type: "data" }, // Second loss model input
       ],
       outputs: [{ name: "combined_loss_out", type: "data" }],
+    },
+    // JMDC Analysis (PRD v2.0 §17, J1~J7)
+    {
+      type: ModuleType.JMDCCohortBuilder,
+      status: ModuleStatus.Pending,
+      parameters: {
+        data_source: "synthetic", // synthetic | supabase | csv
+        synthetic_n: 100000,
+        synthetic_seed: 43,
+        index_date_rule: "birthday_age", // birthday_age | enrollment_date | fixed_date
+        index_age: 50,
+        index_fixed_date: "2018-01-01",
+        age_at_index_min: 30,
+        age_at_index_max: 70,
+        washout_years: 2,
+        exclusion_diseases: ["C00-C97"],
+        disease_free_years: 0,
+      },
+      inputs: [
+        { name: "data_in", type: "data" }, // optional: member·claim·disease long format
+      ],
+      outputs: [{ name: "data_out", type: "data" }],
+    },
+    {
+      type: ModuleType.JMDCOutcomeLabeler,
+      status: ModuleStatus.Pending,
+      parameters: {
+        // outcome dictionary keyed by label name → ICD-10 prefix list
+        outcome_diseases: {
+          colon_ca: ["C18", "C19", "C20"],
+          stroke: ["I60", "I61", "I62", "I63", "I64"],
+          ami: ["I21", "I22"],
+          diabetes: ["E10", "E11", "E12", "E13", "E14"],
+        },
+        outcome_window_years: 5,
+        confirm_suspect_flag: true,
+        multi_outcome_mode: "single", // single | long
+      },
+      inputs: [
+        { name: "data_in", type: "data" }, // cohort from J1
+        { name: "data_in2", type: "data" }, // claims_disease long format (optional when synthetic)
+      ],
+      outputs: [{ name: "data_out", type: "data" }],
+    },
+    {
+      type: ModuleType.JMDCIncidenceRate,
+      status: ModuleStatus.Pending,
+      parameters: {
+        stratify_by: "sex_age", // none | sex | age_band | sex_age
+        standard_population: "japan_2015", // internal | WHO_2000 | japan_2015 | korea_2020
+        rate_unit: "1000_PY", // 1000_PY | 10000_PY | 100000_PY
+        time_grid_years: [1, 2, 3, 4, 5],
+      },
+      inputs: [{ name: "data_in", type: "data" }],
+      outputs: [{ name: "data_out", type: "data" }],
+    },
+    {
+      type: ModuleType.JMDCSurvivalCompare,
+      status: ModuleStatus.Pending,
+      parameters: {
+        group_col: "has_diabetes",
+        time_horizons_years: [1, 3, 5, 10],
+        logrank_method: "standard", // standard | stratified
+        stratify_cols: [],
+      },
+      inputs: [{ name: "data_in", type: "data" }],
+      outputs: [{ name: "data_out", type: "data" }],
+    },
+    {
+      type: ModuleType.JMDCCumulativeIncidence,
+      status: ModuleStatus.Pending,
+      parameters: {
+        event_col: "event_flag",
+        competing_event_cols: [],
+        group_col: "",
+        time_grid_years: [1, 2, 3, 4, 5, 7, 10],
+        bootstrap_n: 0,
+      },
+      inputs: [{ name: "data_in", type: "data" }],
+      outputs: [{ name: "data_out", type: "data" }],
+    },
+    {
+      type: ModuleType.JMDCRiskStratification,
+      status: ModuleStatus.Pending,
+      parameters: {
+        exposure_col: "has_diabetes",
+        covariates: ["age_at_index", "sex_code", "bmi", "charlson"],
+        stratify_col: "",
+        proportional_hazards_test: true,
+        tie_method: "efron", // efron | breslow
+      },
+      inputs: [{ name: "data_in", type: "data" }],
+      outputs: [
+        { name: "data_out", type: "data" },
+        { name: "model_out", type: "model" },
+      ],
+    },
+    {
+      type: ModuleType.JMDCKRJPMatcher,
+      status: ModuleStatus.Pending,
+      parameters: {
+        apply_schema_alignment: true,
+        apply_vocab_mapping: true,
+        apply_standardization: "direct", // none | direct | indirect_sir
+        standard_population: "WHO_2000", // WHO_2000 | japan_2015 | korea_2020 | combined
+        apply_psm: false,
+        psm_covariates: ["age_at_index", "sex_code", "bmi", "charlson"],
+        caliper: 0.2,
+        comparison_outcome: "colon_ca",
+      },
+      inputs: [
+        { name: "data_in", type: "data" }, // JP cohort (J1+J2)
+        { name: "data_in2", type: "data" }, // KR cohort (same schema)
+      ],
+      outputs: [{ name: "data_out", type: "data" }],
     },
   ];
 

@@ -105,7 +105,22 @@ const mortalityModelTypes = [
   ModuleType.PSplineModel,
 ];
 
+// JMDC Analysis (PRD v2.0 §17, J1~J7)
+const jmdcAnalysisTypes = [
+  ModuleType.JMDCCohortBuilder,
+  ModuleType.JMDCOutcomeLabeler,
+  ModuleType.JMDCIncidenceRate,
+  ModuleType.JMDCSurvivalCompare,
+  ModuleType.JMDCCumulativeIncidence,
+  ModuleType.JMDCRiskStratification,
+  ModuleType.JMDCKRJPMatcher,
+];
+
 const categorizedModules = [
+  {
+    name: "JMDC Analysis",
+    modules: TOOLBOX_MODULES.filter((m) => jmdcAnalysisTypes.includes(m.type)),
+  },
   {
     name: "Data Preprocess",
     subCategories: [
@@ -233,6 +248,7 @@ export const Toolbox: React.FC<ToolboxProps> = ({
     "Tradition Analysis-Statistical Model": true,
     "Advanced Model": true,
     "Advanced Model-Mortality Model": true,
+    "JMDC Analysis": true,
   });
 
   const [searchQuery, setSearchQuery] = useState("");

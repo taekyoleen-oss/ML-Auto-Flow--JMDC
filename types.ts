@@ -76,6 +76,15 @@ export enum ModuleType {
   // Deprecating these
   LogisticTradition = "LogisticTradition",
 
+  // JMDC Analysis (PRD v2.0 §17, J1~J7)
+  JMDCCohortBuilder = "JMDCCohortBuilder",
+  JMDCOutcomeLabeler = "JMDCOutcomeLabeler",
+  JMDCIncidenceRate = "JMDCIncidenceRate",
+  JMDCSurvivalCompare = "JMDCSurvivalCompare",
+  JMDCCumulativeIncidence = "JMDCCumulativeIncidence",
+  JMDCRiskStratification = "JMDCRiskStratification",
+  JMDCKRJPMatcher = "JMDCKRJPMatcher",
+
   // Shape Types
   TextBox = "TextBox",
   GroupBox = "GroupBox",
@@ -500,6 +509,150 @@ export interface MortalityResultOutput {
   };
 }
 
+// =====================================================================
+// JMDC Analysis Outputs (PRD v2.0 §17, J1~J7)
+// =====================================================================
+
+export interface JMDCCohortStep {
+  step: string;
+  remaining: number;
+}
+
+export interface JMDCCohortOutput {
+  type: "JMDCCohortOutput";
+  rows: Record<string, any>[];
+  columns: ColumnInfo[];
+  totalRowCount: number;
+  funnel: JMDCCohortStep[];
+  sexDistribution: Record<string, number>;
+  ageBandDistribution: Record<string, number>;
+  exclusionReasons: Record<string, number>;
+  dataSource: "synthetic" | "supabase" | "csv";
+  parameters: Record<string, any>;
+}
+
+// J2 출력은 labeled cohort dataframe — DataPreview처럼 다음 모듈에 전달.
+// 별도 PreviewModal 대신 JMDCSurvivalPreviewModal과 공유.
+export interface JMDCOutcomeOutput {
+  type: "JMDCOutcomeOutput";
+  rows: Record<string, any>[];
+  columns: ColumnInfo[];
+  totalRowCount: number;
+  eventSummary: {
+    total: number;
+    events: number;
+    censored: number;
+    censorReasons: Record<string, number>;
+  };
+  outcomeBreakdown: Record<string, { events: number; rate: number }>;
+}
+
+export interface JMDCIncidenceStratumRow {
+  stratum: string;
+  N: number;
+  person_years: number;
+  events: number;
+  crude_rate: number;
+  crude_ci_lo: number;
+  crude_ci_hi: number;
+  std_rate?: number;
+  std_ci_lo?: number;
+  std_ci_hi?: number;
+}
+
+export interface JMDCIncidenceOutput {
+  type: "JMDCIncidenceOutput";
+  rateTable: JMDCIncidenceStratumRow[];
+  cifGrid: Array<{ stratum: string; t_years: number; cif: number; ci_lo: number; ci_hi: number }>;
+  rateUnit: string;
+  standardPopulation: string;
+  stratifyBy: string;
+}
+
+export interface JMDCSurvivalGroupStats {
+  group: string;
+  N: number;
+  events: number;
+  median_survival: number | null;
+  cum_inc_1y: number | null;
+  cum_inc_3y: number | null;
+  cum_inc_5y: number | null;
+}
+
+export interface JMDCSurvivalOutput {
+  type: "JMDCSurvivalOutput";
+  mode: "km" | "cif";
+  curves: Array<{ group: string; t_years: number[]; survival: number[]; ci_lo: number[]; ci_hi: number[] }>;
+  groupStats: JMDCSurvivalGroupStats[];
+  logrankP: number | null;
+  stratifiedLogrankP: number | null;
+  groupCol?: string;
+  competingEventCols?: string[];
+}
+
+export interface JMDCCoxHrRow {
+  variable: string;
+  hr: number;
+  hr_ci_lo: number;
+  hr_ci_hi: number;
+  p_value: number;
+  ph_test_p?: number | null;
+}
+
+export interface JMDCCoxOutput {
+  type: "JMDCCoxOutput";
+  hrTable: JMDCCoxHrRow[];
+  concordance?: number | null;
+  logLikelihood?: number | null;
+  exposureCol: string;
+  covariates: string[];
+  phWarnings: string[];
+  schoenfeldImage?: string;
+}
+
+export interface JMDCMatcherSmdRow {
+  variable: string;
+  smd_before: number;
+  smd_after: number;
+}
+
+export interface JMDCMatcherRateRow {
+  outcome: string;
+  jp_raw: number;
+  jp_std: number;
+  kr_raw: number;
+  kr_std: number;
+  ratio: number;
+  ratio_ci_lo: number;
+  ratio_ci_hi: number;
+}
+
+export interface JMDCMatcherSirRow {
+  outcome: string;
+  observed: number;
+  expected: number;
+  sir: number;
+  sir_ci_lo: number;
+  sir_ci_hi: number;
+}
+
+export interface JMDCMatcherOutput {
+  type: "JMDCMatcherOutput";
+  smdTable: JMDCMatcherSmdRow[];
+  rateTable: JMDCMatcherRateRow[];
+  sirTable: JMDCMatcherSirRow[];
+  kmOverlay: Array<{ country: "JP" | "KR"; group: string; t_years: number[]; survival: number[] }>;
+  mappingVersion: string;
+  applied: {
+    schema_alignment: boolean;
+    vocab_mapping: boolean;
+    standardization: "none" | "direct" | "indirect_sir";
+    psm: boolean;
+  };
+}
+
+// =====================================================================
+
 export interface CanvasModule {
   id: string;
   name: string;
@@ -533,7 +686,13 @@ export interface CanvasModule {
     | CorrelationOutput
     | VIFCheckerOutput
     | MortalityModelOutput
-    | MortalityResultOutput;
+    | MortalityResultOutput
+    | JMDCCohortOutput
+    | JMDCOutcomeOutput
+    | JMDCIncidenceOutput
+    | JMDCSurvivalOutput
+    | JMDCCoxOutput
+    | JMDCMatcherOutput;
   executionTime?: number; // milliseconds, set after successful run
   notes?: string; // user-written memo shown on the module card
   // Shape-specific properties

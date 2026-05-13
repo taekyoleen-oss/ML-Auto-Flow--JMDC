@@ -110,6 +110,11 @@ import { OutlierDetectorPreviewModal } from "./components/OutlierDetectorPreview
 import { HypothesisTestingPreviewModal } from "./components/HypothesisTestingPreviewModal";
 import { NormalityCheckerPreviewModal } from "./components/NormalityCheckerPreviewModal";
 import { CorrelationPreviewModal } from "./components/CorrelationPreviewModal";
+import { JMDCCohortPreviewModal } from "./components/JMDCCohortPreviewModal";
+import { JMDCIncidencePreviewModal } from "./components/JMDCIncidencePreviewModal";
+import { JMDCSurvivalPreviewModal } from "./components/JMDCSurvivalPreviewModal";
+import { JMDCCoxPreviewModal } from "./components/JMDCCoxPreviewModal";
+import { JMDCMatcherPreviewModal } from "./components/JMDCMatcherPreviewModal";
 import { ModelComparisonModal } from "./components/ModelComparisonModal";
 import { RunHistoryModal } from "./components/RunHistoryModal";
 import { ShortcutsModal } from "./components/ShortcutsModal";
@@ -238,6 +243,12 @@ const App: React.FC = () => {
     useState<CanvasModule | null>(null);
   const [viewingTrainedClusteringModel, setViewingTrainedClusteringModel] =
     useState<CanvasModule | null>(null);
+  // JMDC Analysis (PRD v2.0 §17, J1~J7)
+  const [viewingJMDCCohort, setViewingJMDCCohort] = useState<CanvasModule | null>(null);
+  const [viewingJMDCIncidence, setViewingJMDCIncidence] = useState<CanvasModule | null>(null);
+  const [viewingJMDCSurvival, setViewingJMDCSurvival] = useState<CanvasModule | null>(null);
+  const [viewingJMDCCox, setViewingJMDCCox] = useState<CanvasModule | null>(null);
+  const [viewingJMDCMatcher, setViewingJMDCMatcher] = useState<CanvasModule | null>(null);
 
   const [showModelComparison, setShowModelComparison] = useState(false);
   const [showRunHistory, setShowRunHistory] = useState(false);
@@ -3378,6 +3389,19 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
           "Setting viewingTrainedClusteringModel for TrainedClusteringModelOutput"
         );
         setViewingTrainedClusteringModel(module);
+      } else if (module.outputData.type === "JMDCCohortOutput") {
+        setViewingJMDCCohort(module);
+      } else if (module.outputData.type === "JMDCOutcomeOutput") {
+        // J2 outputs use the generic DataPreview modal (labeled cohort frame)
+        setViewingDataForModule(module);
+      } else if (module.outputData.type === "JMDCIncidenceOutput") {
+        setViewingJMDCIncidence(module);
+      } else if (module.outputData.type === "JMDCSurvivalOutput") {
+        setViewingJMDCSurvival(module);
+      } else if (module.outputData.type === "JMDCCoxOutput") {
+        setViewingJMDCCox(module);
+      } else if (module.outputData.type === "JMDCMatcherOutput") {
+        setViewingJMDCMatcher(module);
       } else {
         console.log(
           "Setting viewingDataForModule for other type:",
@@ -3408,6 +3432,11 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
     setViewingCorrelation(null);
     setViewingTrainedClusteringModel(null);
     setViewingClusteringData(null);
+    setViewingJMDCCohort(null);
+    setViewingJMDCIncidence(null);
+    setViewingJMDCSurvival(null);
+    setViewingJMDCCox(null);
+    setViewingJMDCMatcher(null);
   };
 
   // Model definition modules that should not be executed directly in Run All
@@ -3812,6 +3841,16 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
           );
           return sourceModule.outputData;
         }
+      }
+
+      // JMDC outputs (Cohort, Outcome) carry DataPreview-compatible rows/columns
+      // and can be consumed by downstream JMDC modules as a data input.
+      if (
+        (sourceModule.outputData.type === "JMDCCohortOutput" ||
+          sourceModule.outputData.type === "JMDCOutcomeOutput") &&
+        portType === "data"
+      ) {
+        return sourceModule.outputData as unknown as DataPreview;
       }
 
       if (
@@ -4703,6 +4742,189 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
             const errorMessage = error.message || String(error);
             addLog("ERROR", `Python Normality Check 실패: ${errorMessage}`);
             throw new Error(`정규성 검정 실패: ${errorMessage}`);
+          }
+        } else if (module.type === ModuleType.JMDCCohortBuilder) {
+          // [J1] Cohort Builder — synthetic mode integrated; optional upstream data
+          const inputData = getSingleInputData(module.id) as DataPreview | null;
+          try {
+            addLog("INFO", "[J1] JMDC Cohort Builder 실행 중 (Python/Pyodide)...");
+            const { performJMDCCohort } = await import("./utils/pyodideRunner");
+            const result = await performJMDCCohort(
+              inputData?.rows ?? null,
+              module.parameters
+            );
+            // store hidden _claimsDisease in module.parameters for J2 to pick up
+            const newParams = {
+              ...module.parameters,
+              _claims_disease: result._claims_disease ?? null,
+            };
+            setModules((prev) =>
+              prev.map((m) =>
+                m.id === module.id ? { ...m, parameters: newParams } : m
+              )
+            );
+            newOutputData = {
+              type: "JMDCCohortOutput",
+              rows: result.rows,
+              columns: result.columns,
+              totalRowCount: result.totalRowCount,
+              funnel: result.funnel,
+              sexDistribution: result.sexDistribution,
+              ageBandDistribution: result.ageBandDistribution,
+              exclusionReasons: result.exclusionReasons,
+              dataSource: result.dataSource,
+              parameters: result.parameters,
+            };
+            addLog(
+              "SUCCESS",
+              `[J1] Cohort 생성 완료: N=${result.totalRowCount.toLocaleString()} (source: ${result.dataSource})`
+            );
+          } catch (error: any) {
+            addLog("ERROR", `[J1] Cohort Builder 실패: ${error.message || error}`);
+            throw new Error(`Cohort Builder 실패: ${error.message || error}`);
+          }
+        } else if (module.type === ModuleType.JMDCOutcomeLabeler) {
+          // [J2] Outcome Labeler
+          // dataframe : cohort from J1 (port data_in)
+          // dataframe2: external claims_disease (port data_in2, optional);
+          //             when absent, use synthetic claims piggy-backed on the J1 module parameters.
+          const cohortInput = getSingleInputData(module.id, "data", "data_in") as DataPreview | null;
+          const claimsInput = getSingleInputData(module.id, "data", "data_in2") as DataPreview | null;
+          if (!cohortInput) {
+            throw new Error("[J2] cohort 입력이 없습니다 (J1 모듈을 data_in에 연결).");
+          }
+          // Try to recover claims_disease from upstream J1 module's hidden param
+          let claimsRows: any[] | null = claimsInput?.rows ?? null;
+          if (!claimsRows) {
+            const upstreamConn = connections.find(
+              (c) => c.to.moduleId === module.id && c.to.portName === "data_in"
+            );
+            if (upstreamConn) {
+              const up = modules.find((m) => m.id === upstreamConn.from.moduleId);
+              if (up && up.parameters?._claims_disease) {
+                claimsRows = up.parameters._claims_disease;
+              }
+            }
+          }
+          try {
+            addLog("INFO", "[J2] Outcome Labeler 실행 중 (Python/Pyodide)...");
+            const { performJMDCOutcomeLabeler } = await import("./utils/pyodideRunner");
+            const result = await performJMDCOutcomeLabeler(
+              cohortInput.rows ?? [],
+              claimsRows,
+              module.parameters
+            );
+            newOutputData = {
+              type: "JMDCOutcomeOutput",
+              rows: result.allRows ?? result.rows,
+              columns: result.columns,
+              totalRowCount: result.totalRowCount,
+              eventSummary: result.eventSummary,
+              outcomeBreakdown: result.outcomeBreakdown,
+            } as any;
+            addLog(
+              "SUCCESS",
+              `[J2] Outcome 라벨링 완료: events=${result.eventSummary.events}/${result.eventSummary.total}`
+            );
+          } catch (error: any) {
+            addLog("ERROR", `[J2] Outcome Labeler 실패: ${error.message || error}`);
+            throw new Error(`Outcome Labeler 실패: ${error.message || error}`);
+          }
+        } else if (module.type === ModuleType.JMDCIncidenceRate) {
+          const inputData = getSingleInputData(module.id) as DataPreview | null;
+          if (!inputData) throw new Error("[J3] J2의 labeled cohort를 입력에 연결하세요.");
+          try {
+            addLog("INFO", "[J3] Incidence Rate 계산 중 (Python/Pyodide)...");
+            const { performJMDCIncidenceRate } = await import("./utils/pyodideRunner");
+            const result = await performJMDCIncidenceRate(
+              inputData.rows ?? [],
+              module.parameters
+            );
+            newOutputData = {
+              type: "JMDCIncidenceOutput",
+              ...result,
+            } as any;
+            addLog("SUCCESS", `[J3] Incidence Rate 산출 완료 (${result.rateTable.length} strata).`);
+          } catch (error: any) {
+            addLog("ERROR", `[J3] Incidence Rate 실패: ${error.message || error}`);
+            throw new Error(`Incidence Rate 실패: ${error.message || error}`);
+          }
+        } else if (module.type === ModuleType.JMDCSurvivalCompare) {
+          const inputData = getSingleInputData(module.id) as DataPreview | null;
+          if (!inputData) throw new Error("[J4] J2의 labeled cohort를 입력에 연결하세요.");
+          try {
+            addLog("INFO", "[J4] KM Survival Compare 실행 중 (Python + lifelines)...");
+            const { performJMDCSurvivalCompare } = await import("./utils/pyodideRunner");
+            const result = await performJMDCSurvivalCompare(
+              inputData.rows ?? [],
+              module.parameters
+            );
+            newOutputData = { type: "JMDCSurvivalOutput", ...result } as any;
+            addLog(
+              "SUCCESS",
+              `[J4] KM 비교 완료 (groups=${result.curves.length}, log-rank p=${result.logrankP?.toExponential?.(3) ?? "—"}).`
+            );
+          } catch (error: any) {
+            addLog("ERROR", `[J4] Survival Compare 실패: ${error.message || error}`);
+            throw new Error(`Survival Compare 실패: ${error.message || error}`);
+          }
+        } else if (module.type === ModuleType.JMDCCumulativeIncidence) {
+          const inputData = getSingleInputData(module.id) as DataPreview | null;
+          if (!inputData) throw new Error("[J5] J2의 labeled cohort를 입력에 연결하세요.");
+          try {
+            addLog("INFO", "[J5] Cumulative Incidence 계산 중 (Python + lifelines)...");
+            const { performJMDCCumulativeIncidence } = await import("./utils/pyodideRunner");
+            const result = await performJMDCCumulativeIncidence(
+              inputData.rows ?? [],
+              module.parameters
+            );
+            newOutputData = { type: "JMDCSurvivalOutput", ...result } as any;
+            addLog("SUCCESS", `[J5] CIF 산출 완료 (${result.curves.length} curves).`);
+          } catch (error: any) {
+            addLog("ERROR", `[J5] Cumulative Incidence 실패: ${error.message || error}`);
+            throw new Error(`Cumulative Incidence 실패: ${error.message || error}`);
+          }
+        } else if (module.type === ModuleType.JMDCRiskStratification) {
+          const inputData = getSingleInputData(module.id) as DataPreview | null;
+          if (!inputData) throw new Error("[J6] J2의 labeled cohort를 입력에 연결하세요.");
+          try {
+            addLog("INFO", "[J6] Cox PH 모형 적합 중 (Python + lifelines)...");
+            const { performJMDCRiskStratification } = await import("./utils/pyodideRunner");
+            const result = await performJMDCRiskStratification(
+              inputData.rows ?? [],
+              module.parameters
+            );
+            newOutputData = { type: "JMDCCoxOutput", ...result } as any;
+            addLog(
+              "SUCCESS",
+              `[J6] Cox 적합 완료 (C-index=${result.concordance?.toFixed?.(3) ?? "—"}, vars=${result.hrTable.length}).`
+            );
+          } catch (error: any) {
+            addLog("ERROR", `[J6] Risk Stratification 실패: ${error.message || error}`);
+            throw new Error(`Risk Stratification 실패: ${error.message || error}`);
+          }
+        } else if (module.type === ModuleType.JMDCKRJPMatcher) {
+          const jpInput = getSingleInputData(module.id, "data", "data_in") as DataPreview | null;
+          const krInput = getSingleInputData(module.id, "data", "data_in2") as DataPreview | null;
+          if (!jpInput || !krInput) {
+            throw new Error("[J7] JP 코호트와 KR 코호트를 각각 data_in, data_in2 포트에 연결하세요.");
+          }
+          try {
+            addLog("INFO", "[J7] KR-JP Matcher 실행 중 (Python + sklearn + lifelines)...");
+            const { performJMDCMatcher } = await import("./utils/pyodideRunner");
+            const result = await performJMDCMatcher(
+              jpInput.rows ?? [],
+              krInput.rows ?? [],
+              module.parameters
+            );
+            newOutputData = { type: "JMDCMatcherOutput", ...result } as any;
+            addLog(
+              "SUCCESS",
+              `[J7] KR-JP 매칭 완료 (variables=${result.smdTable.length}, SIR rows=${result.sirTable.length}).`
+            );
+          } catch (error: any) {
+            addLog("ERROR", `[J7] KR-JP Matcher 실패: ${error.message || error}`);
+            throw new Error(`KR-JP Matcher 실패: ${error.message || error}`);
           }
         } else if (module.type === ModuleType.VIFChecker) {
           const inputData = getSingleInputData(module.id) as DataPreview;
@@ -11539,7 +11761,8 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
           (viewingDataForModule.outputData?.type === "DataPreview" ||
             viewingDataForModule.outputData?.type === "KMeansOutput" ||
             viewingDataForModule.outputData?.type === "PCAOutput" ||
-            viewingDataForModule.outputData?.type === "VIFCheckerOutput");
+            viewingDataForModule.outputData?.type === "VIFCheckerOutput" ||
+            viewingDataForModule.outputData?.type === "JMDCOutcomeOutput");
 
         if (shouldShowModal) {
           console.log(
@@ -11819,6 +12042,51 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
           modules={modules}
           connections={connections}
         />
+      )}
+      {viewingJMDCCohort && (
+        <ErrorBoundary>
+          <JMDCCohortPreviewModal
+            module={viewingJMDCCohort}
+            projectName={projectName}
+            onClose={handleCloseModal}
+          />
+        </ErrorBoundary>
+      )}
+      {viewingJMDCIncidence && (
+        <ErrorBoundary>
+          <JMDCIncidencePreviewModal
+            module={viewingJMDCIncidence}
+            projectName={projectName}
+            onClose={handleCloseModal}
+          />
+        </ErrorBoundary>
+      )}
+      {viewingJMDCSurvival && (
+        <ErrorBoundary>
+          <JMDCSurvivalPreviewModal
+            module={viewingJMDCSurvival}
+            projectName={projectName}
+            onClose={handleCloseModal}
+          />
+        </ErrorBoundary>
+      )}
+      {viewingJMDCCox && (
+        <ErrorBoundary>
+          <JMDCCoxPreviewModal
+            module={viewingJMDCCox}
+            projectName={projectName}
+            onClose={handleCloseModal}
+          />
+        </ErrorBoundary>
+      )}
+      {viewingJMDCMatcher && (
+        <ErrorBoundary>
+          <JMDCMatcherPreviewModal
+            module={viewingJMDCMatcher}
+            projectName={projectName}
+            onClose={handleCloseModal}
+          />
+        </ErrorBoundary>
       )}
       {viewingEvaluation &&
         (() => {

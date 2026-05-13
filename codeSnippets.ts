@@ -1713,6 +1713,168 @@ p_columns = {columns}
 # 이 모듈은 설정만 저장하며, 실행은 App.tsx에서 처리됩니다.
 print(f"Correlation configured for columns: {p_columns}")
 `,
+
+  // ===== JMDC Analysis Modules (PRD v2.0 §17, J1~J7) =====
+  JMDCCohortBuilder: `
+# [J1] JMDC Cohort Builder (PRD v2.0 §17.2)
+# Index Date 기준 코호트 정의 + 합성 데이터 생성기 통합
+# 실제 분석은 Pyodide를 통해 Python으로 실행됩니다 (utils/pyodideRunner.ts의 performJMDCCohort).
+
+import pandas as pd
+import numpy as np
+from dateutil.relativedelta import relativedelta
+
+# Parameters from UI
+p_data_source       = {data_source}        # 'synthetic' | 'supabase' | 'csv'
+p_synthetic_n       = {synthetic_n}
+p_synthetic_seed    = {synthetic_seed}
+p_index_date_rule   = {index_date_rule}    # 'birthday_age' | 'enrollment_date' | 'fixed_date'
+p_index_age         = {index_age}
+p_index_fixed_date  = {index_fixed_date}
+p_age_min           = {age_at_index_min}
+p_age_max           = {age_at_index_max}
+p_washout_years     = {washout_years}
+p_exclusion_dx      = {exclusion_diseases}  # ICD-10 prefix list (예: ['C00-C97'])
+p_disease_free_yrs  = {disease_free_years}
+
+def compute_index_date(df, rule, age=None, fixed_date=None):
+    if rule == 'birthday_age':
+        return df['birth_date'] + pd.to_timedelta((age * 365.25).__int__(), unit='D')
+    if rule == 'fixed_date':
+        return pd.to_datetime([fixed_date] * len(df))
+    return df['first_obs_date']  # enrollment_date
+
+# Funnel: each filter step counts remaining N.
+funnel = []
+# 1) source → 2) washout → 3) age window → 4) exclusion → 5) disease_free_years
+# The full implementation is in pyodideRunner.ts (performJMDCCohort).
+print("J1 JMDC Cohort Builder configured.")
+`,
+
+  JMDCOutcomeLabeler: `
+# [J2] JMDC Outcome Labeler (PRD v2.0 §17.2)
+# 코호트별 outcome event 발생 시점·검열 시점 산출.
+# 실행: utils/pyodideRunner.ts의 performJMDCOutcomeLabeler.
+
+import pandas as pd
+
+# Parameters from UI
+p_outcome_diseases     = {outcome_diseases}     # dict[label] → ICD-10 prefix list
+p_outcome_window_years = {outcome_window_years}
+p_confirm_suspect      = {confirm_suspect_flag}
+p_multi_outcome_mode   = {multi_outcome_mode}   # 'single' | 'long'
+
+# dataframe : 코호트 (J1 출력) — member_id, index_date, age_at_index, sex_code, ...
+# dataframe2: claims_disease — member_id, icd10_code, onset_date, suspect_flag
+# 출력 컬럼 추가: outcome_type, first_event_date, time_to_event_days, event_flag, censor_reason
+print("J2 JMDC Outcome Labeler configured.")
+`,
+
+  JMDCIncidenceRate: `
+# [J3] JMDC Incidence Rate (PRD v2.0 §17.2)
+# person-years 분모 기반 조발생률·연령표준화발생률.
+# 실행: utils/pyodideRunner.ts의 performJMDCIncidenceRate.
+
+import pandas as pd
+import numpy as np
+from scipy.stats import chi2
+
+# Parameters from UI
+p_stratify_by         = {stratify_by}           # none | sex | age_band | sex_age
+p_standard_population = {standard_population}   # internal | WHO_2000 | japan_2015 | korea_2020
+p_rate_unit           = {rate_unit}             # 1000_PY | 10000_PY | 100000_PY
+p_time_grid_years     = {time_grid_years}
+
+def poisson_ci_byar(events, person_years):
+    """Byar's approximation for Poisson 95% CI."""
+    o = np.maximum(events, 0.5)
+    lo = (o * (1 - 1/(9*o) - 1.96/(3*np.sqrt(o)))**3) / person_years
+    hi = ((o+1) * (1 - 1/(9*(o+1)) + 1.96/(3*np.sqrt(o+1)))**3) / person_years
+    return lo, hi
+
+print("J3 JMDC Incidence Rate configured.")
+`,
+
+  JMDCSurvivalCompare: `
+# [J4] JMDC Survival Compare (KM, log-rank) (PRD v2.0 §17.2)
+# 2개 이상 군의 KM 곡선 + log-rank / stratified log-rank.
+# lifelines 필요 → 첫 실행 시 micropip.install("lifelines").
+# 실행: utils/pyodideRunner.ts의 performJMDCSurvivalCompare.
+
+# import micropip; await micropip.install("lifelines")  # Pyodide 환경에서 자동 처리
+from lifelines import KaplanMeierFitter
+from lifelines.statistics import multivariate_logrank_test
+
+# Parameters from UI
+p_group_col           = {group_col}
+p_time_horizons_years = {time_horizons_years}
+p_logrank_method      = {logrank_method}   # standard | stratified
+p_stratify_cols       = {stratify_cols}
+
+# dataframe: J2 출력 (event_flag, time_to_event_days, + group column)
+print("J4 JMDC Survival Compare configured.")
+`,
+
+  JMDCCumulativeIncidence: `
+# [J5] JMDC Cumulative Incidence (PRD v2.0 §17.2)
+# 경쟁위험 고려 누적 발생 함수 (Aalen-Johansen) or 1-KM (단일 사건).
+# 실행: utils/pyodideRunner.ts의 performJMDCCumulativeIncidence.
+
+# from lifelines import AalenJohansenFitter
+import pandas as pd
+import numpy as np
+
+# Parameters from UI
+p_event_col            = {event_col}
+p_competing_event_cols = {competing_event_cols}
+p_group_col            = {group_col}
+p_time_grid_years      = {time_grid_years}
+p_bootstrap_n          = {bootstrap_n}
+
+print("J5 JMDC Cumulative Incidence configured.")
+`,
+
+  JMDCRiskStratification: `
+# [J6] JMDC Risk Stratification (Cox PH) (PRD v2.0 §17.2)
+# 공변량 보정 위험비 (HR) 산출. PH 가정 검정 (Schoenfeld) 포함.
+# 실행: utils/pyodideRunner.ts의 performJMDCRiskStratification.
+
+from lifelines import CoxPHFitter
+
+# Parameters from UI
+p_exposure_col   = {exposure_col}
+p_covariates     = {covariates}
+p_stratify_col   = {stratify_col}
+p_ph_test        = {proportional_hazards_test}
+p_tie_method     = {tie_method}    # efron | breslow
+
+# 출력: HR table + PH check + trained Cox model (다음 ScoreModel 모듈에서 재사용 가능)
+print("J6 JMDC Risk Stratification configured.")
+`,
+
+  JMDCKRJPMatcher: `
+# [J7] JMDC KR-JP Matcher (PRD v2.0 §18, 4-Layer)
+# L1 schema alignment / L2 vocab mapping / L3 standardisation / L4 PSM.
+# 실행: utils/pyodideRunner.ts의 performJMDCMatcher.
+
+from sklearn.linear_model import LogisticRegression
+import numpy as np
+import pandas as pd
+
+# Parameters from UI
+p_apply_schema    = {apply_schema_alignment}
+p_apply_vocab     = {apply_vocab_mapping}
+p_standardize     = {apply_standardization}    # none | direct | indirect_sir
+p_standard_pop    = {standard_population}
+p_apply_psm       = {apply_psm}
+p_psm_covariates  = {psm_covariates}
+p_caliper         = {caliper}
+p_comparison_out  = {comparison_outcome}
+
+# dataframe : JP cohort (J1+J2) / dataframe2: KR cohort (동일 스키마)
+# 출력: SMD before/after, 표준화 발생률 비교, SIR (Byar), KM overlay.
+print("J7 JMDC KR-JP Matcher configured.")
+`,
 };
 
 export const getModuleCode = (

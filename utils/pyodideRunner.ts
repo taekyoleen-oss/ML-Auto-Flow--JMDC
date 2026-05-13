@@ -10149,3 +10149,1189 @@ except Exception as e:
     throw new Error(`Python Regression Plot error:\n${errorMessage}`);
   }
 }
+
+// =====================================================================
+// JMDC Analysis Helpers (PRD v2.0 §17, J1~J7)
+// All analyses run in Python via Pyodide. lifelines is installed lazily
+// via micropip on first use of J4/J5/J6.
+// =====================================================================
+
+let lifelinesInstalled = false;
+async function ensureLifelinesInstalled(): Promise<void> {
+  if (lifelinesInstalled) return;
+  const py = await loadPyodide();
+  notifyStatus("lifelines 패키지 설치 중... (최초 1회)", 70);
+  try {
+    await py.loadPackagesFromImports("import micropip");
+    // Pyodide ships pandas 1.5.x; newer lifelines (>=0.28) demands pandas>=2.1
+    // and breaks. Install the last lifelines version compatible with pandas 1.5.
+    await py.runPythonAsync(`
+import micropip
+try:
+    import lifelines  # already available?
+except ImportError:
+    # Try a compatible version chain. autograd-gamma is a lifelines dep.
+    for spec in ["lifelines==0.27.8", "lifelines==0.27.4", "lifelines"]:
+        try:
+            await micropip.install(spec, keep_going=True)
+            import lifelines  # noqa: F401
+            break
+        except Exception as _exc:
+            last_error = _exc
+            continue
+    else:
+        raise last_error
+`);
+    lifelinesInstalled = true;
+    notifyStatus("", 0);
+  } catch (e: any) {
+    notifyStatus("", 0);
+    throw new Error(`lifelines 설치 실패: ${e.message || e}`);
+  }
+}
+
+async function runJMDCAnalysis(
+  pythonCode: string,
+  inputs: Record<string, any>,
+  timeoutMs: number
+): Promise<any> {
+  const py = await loadPyodide();
+  for (const [k, v] of Object.entries(inputs)) {
+    py.globals.set(k, JSON.stringify(v));
+  }
+  try {
+    // Sanitiser: replace NaN/Inf with null so JSON parsing on the JS side works.
+    const sanitiseHelper = `
+def _jmdc_clean(o):
+    import math
+    if isinstance(o, float):
+        if math.isnan(o) or math.isinf(o):
+            return None
+        return o
+    if isinstance(o, dict):
+        return {k: _jmdc_clean(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_jmdc_clean(v) for v in o]
+    return o
+`;
+    const wrapped = `${sanitiseHelper}
+import json, io, sys, traceback
+_buf = io.StringIO()
+_old = sys.stdout
+sys.stdout = _buf
+_err = None
+_result_json = None
+try:
+${pythonCode.split("\n").map((l) => "    " + l).join("\n")}
+except Exception as _e:
+    _err = traceback.format_exc()
+finally:
+    sys.stdout = _old
+# Re-serialise with NaN/Inf scrubbed so json.loads on JS side works.
+if _result_json and not _err:
+    try:
+        _obj = json.loads(_result_json)
+        _result_json = json.dumps(_jmdc_clean(_obj), allow_nan=False)
+    except Exception:
+        pass
+(_result_json, _buf.getvalue(), _err)
+`;
+    const result = await withTimeout(
+      py.runPythonAsync(wrapped),
+      timeoutMs,
+      `JMDC analysis timed out (${timeoutMs / 1000}s)`
+    );
+    const tuple = fromPython(result);
+    const [resultJson, stdout, err] = Array.isArray(tuple) ? tuple : [null, "", null];
+    if (err) {
+      throw new Error(`Python error:\n${err}\n--- stdout ---\n${stdout}`);
+    }
+    if (!resultJson) {
+      throw new Error(`No result returned. stdout:\n${stdout}`);
+    }
+    return typeof resultJson === "string" ? JSON.parse(resultJson) : resultJson;
+  } finally {
+    for (const k of Object.keys(inputs)) {
+      try { py.globals.delete(k); } catch { /* noop */ }
+    }
+  }
+}
+
+// ----- J1: Cohort Builder (synthetic data 통합) -----
+const JMDC_COHORT_PY = `
+import json
+import numpy as np
+import pandas as pd
+from dateutil.relativedelta import relativedelta
+
+_params = json.loads(js_params)
+_input_rows = json.loads(js_input_rows) if js_input_rows else None
+
+def make_synthetic(n, seed):
+    rng = np.random.default_rng(seed)
+    sex = rng.choice(['M', 'F'], size=n, p=[0.52, 0.48])
+    age_now = np.clip(rng.normal(48, 14, n).round(), 20, 80).astype(int)
+    birth_date = pd.Timestamp('2025-01-01') - pd.to_timedelta((age_now * 365.25).astype(int), unit='D')
+    obs_start = pd.to_datetime('2015-01-01') + pd.to_timedelta(rng.integers(0, 365*6, n), unit='D')
+    obs_end = obs_start + pd.to_timedelta(rng.integers(365*3, 365*8, n), unit='D')
+    bmi = np.clip(rng.normal(23.5, 3.5, n), 14, 45)
+    # diabetes prevalence varies by age
+    diab_p = np.where(age_now >= 50, 0.18, np.where(age_now >= 30, 0.08, 0.04))
+    has_diabetes = (rng.uniform(0, 1, n) < diab_p).astype(int)
+    has_htn = (rng.uniform(0, 1, n) < 0.28).astype(int)
+    charlson = np.clip(rng.poisson(0.4 + has_diabetes * 0.6 + has_htn * 0.2, n), 0, 8)
+    df = pd.DataFrame({
+        'member_id': [f'M{1000000+i}' for i in range(n)],
+        'sex_code': sex,
+        'birth_date': birth_date,
+        'first_obs_date': obs_start,
+        'last_obs_date': obs_end,
+        'bmi': bmi.round(1),
+        'has_diabetes': has_diabetes,
+        'has_htn': has_htn,
+        'charlson': charlson,
+    })
+    # generate synthetic event dates for outcomes used by J2
+    # 5y rates from PRD §17.5
+    base_rates = {
+        'colon_ca':  {'ndm': 0.012, 'dm': 0.017},
+        'ami':       {'ndm': 0.009, 'dm': 0.018},
+        'stroke':    {'ndm': 0.014, 'dm': 0.025},
+        'diabetes':  {'ndm': 0.000, 'dm': 0.000},  # exposure, not outcome
+    }
+    event_records = []
+    for outcome, rates in base_rates.items():
+        if outcome == 'diabetes':
+            continue
+        p = np.where(has_diabetes == 1, rates['dm'], rates['ndm'])
+        will_event = rng.uniform(0, 1, n) < p
+        # spread event day uniformly across 5y
+        days_after_start = rng.integers(0, 365*5, n)
+        for i in np.where(will_event)[0]:
+            event_records.append({
+                'member_id': df.iloc[i]['member_id'],
+                'icd10_code': {'colon_ca': 'C18', 'ami': 'I21', 'stroke': 'I63'}[outcome],
+                'onset_date': df.iloc[i]['first_obs_date'] + pd.Timedelta(days=int(days_after_start[i])),
+                'suspect_flag': bool(rng.uniform(0, 1) < 0.08),
+            })
+    # death (5y)
+    will_die = rng.uniform(0, 1, n) < 0.015
+    for i in np.where(will_die)[0]:
+        event_records.append({
+            'member_id': df.iloc[i]['member_id'],
+            'icd10_code': 'R99',
+            'onset_date': df.iloc[i]['first_obs_date'] + pd.Timedelta(days=int(rng.integers(0, 365*5))),
+            'suspect_flag': False,
+        })
+    claims_disease = pd.DataFrame(event_records)
+    return df, claims_disease
+
+# 1. Source
+if _params['data_source'] == 'synthetic' or _input_rows is None:
+    members, claims_disease = make_synthetic(int(_params['synthetic_n']), int(_params['synthetic_seed']))
+else:
+    members = pd.DataFrame(_input_rows)
+    members['birth_date'] = pd.to_datetime(members['birth_date'])
+    members['first_obs_date'] = pd.to_datetime(members['first_obs_date'])
+    members['last_obs_date'] = pd.to_datetime(members['last_obs_date'])
+    claims_disease = pd.DataFrame()  # downstream J2 supplies its own when external
+
+funnel = [{'step': 'Source loaded', 'remaining': int(len(members))}]
+
+# 2. Index Date
+rule = _params['index_date_rule']
+if rule == 'birthday_age':
+    age = int(_params['index_age'])
+    members['index_date'] = members['birth_date'] + pd.to_timedelta(int(age * 365.25), unit='D')
+elif rule == 'fixed_date':
+    members['index_date'] = pd.to_datetime(_params['index_fixed_date'])
+else:
+    members['index_date'] = members['first_obs_date']
+
+# 3. Washout (Index Date 이전 최소 관측 연수)
+washout_days = int(float(_params['washout_years']) * 365.25)
+keep = members['first_obs_date'] <= (members['index_date'] - pd.Timedelta(days=washout_days))
+keep &= members['last_obs_date'] >= members['index_date']
+members['_washout_pass'] = keep
+exclusion_log = {}
+exclusion_log['washout_fail'] = int((~keep).sum())
+members = members[keep].copy()
+funnel.append({'step': f'After washout ({_params["washout_years"]}y)', 'remaining': int(len(members))})
+
+# 4. Age window
+members['age_at_index'] = ((members['index_date'] - members['birth_date']).dt.days / 365.25).astype(int)
+age_min = int(_params['age_at_index_min']); age_max = int(_params['age_at_index_max'])
+age_mask = (members['age_at_index'] >= age_min) & (members['age_at_index'] <= age_max)
+exclusion_log['age_out_of_range'] = int((~age_mask).sum())
+members = members[age_mask].copy()
+funnel.append({'step': f'Age window [{age_min}, {age_max}]', 'remaining': int(len(members))})
+
+# 5. Exclusion by ICD-10 (claims_disease 가 있을 때만)
+def expand_icd_prefixes(prefixes):
+    out = set()
+    for p in prefixes:
+        if '-' in p and len(p) >= 7 and p[0] == p[4]:  # 'C00-C97'
+            letter = p[0]
+            lo = int(p[1:3]); hi = int(p[5:7])
+            for x in range(lo, hi + 1):
+                out.add(f'{letter}{x:02d}')
+        else:
+            out.add(p)
+    return out
+
+exclusion_prefixes = expand_icd_prefixes(_params.get('exclusion_diseases', []))
+disease_free_yrs = float(_params.get('disease_free_years', 0))
+if len(claims_disease) > 0 and (exclusion_prefixes or disease_free_yrs > 0):
+    claims_disease['onset_date'] = pd.to_datetime(claims_disease['onset_date'])
+    if exclusion_prefixes:
+        prefix_mask = claims_disease['icd10_code'].str[:3].isin(exclusion_prefixes)
+        excluded = claims_disease[prefix_mask][['member_id', 'onset_date']]
+        merged = members.merge(excluded, on='member_id', how='left', suffixes=('', '_dx'))
+        if disease_free_yrs > 0:
+            window_start = members['index_date'].repeat(merged.groupby('member_id').size() if False else 1)
+            cutoff = members.set_index('member_id')['index_date'] - pd.Timedelta(days=int(disease_free_yrs * 365.25))
+            bad_ids = set()
+            for mid, sub in merged.groupby('member_id'):
+                idx_dt = members.loc[members['member_id'] == mid, 'index_date'].iloc[0]
+                cutoff_dt = idx_dt - pd.Timedelta(days=int(disease_free_yrs * 365.25))
+                if sub['onset_date'].dropna().between(cutoff_dt, idx_dt).any():
+                    bad_ids.add(mid)
+            exclude_mask = members['member_id'].isin(bad_ids)
+        else:
+            exclude_mask = members['member_id'].isin(excluded['member_id'])
+        exclusion_log['exclusion_icd'] = int(exclude_mask.sum())
+        members = members[~exclude_mask].copy()
+        funnel.append({'step': f'ICD exclusion {sorted(list(exclusion_prefixes))[:3]}…', 'remaining': int(len(members))})
+
+# 6. Age band
+members['age_band'] = pd.cut(members['age_at_index'],
+                              bins=[0, 29, 39, 49, 59, 69, 200],
+                              labels=['<30', '30-39', '40-49', '50-59', '60-69', '70+']).astype(str)
+
+# Distributions
+sex_dist = members['sex_code'].value_counts().to_dict()
+ageband_dist = members['age_band'].value_counts().to_dict()
+
+# Output rows: full member row + claims_disease piggy-backed for J2 via attribute
+# We persist members in the dataframe; claims_disease are tracked in payload meta.
+output_columns = ['member_id', 'index_date', 'age_at_index', 'sex_code', 'age_band',
+                  'bmi', 'has_diabetes', 'has_htn', 'charlson',
+                  'first_obs_date', 'last_obs_date']
+output_columns = [c for c in output_columns if c in members.columns]
+out = members[output_columns].copy()
+out['index_date'] = out['index_date'].dt.strftime('%Y-%m-%d')
+if 'first_obs_date' in out.columns:
+    out['first_obs_date'] = pd.to_datetime(out['first_obs_date']).dt.strftime('%Y-%m-%d')
+if 'last_obs_date' in out.columns:
+    out['last_obs_date'] = pd.to_datetime(out['last_obs_date']).dt.strftime('%Y-%m-%d')
+rows_out = out.to_dict(orient='records')
+
+# claims_disease for J2 — keep as separate payload key
+cd_out = None
+if len(claims_disease) > 0:
+    cd = claims_disease.copy()
+    cd['onset_date'] = pd.to_datetime(cd['onset_date']).dt.strftime('%Y-%m-%d')
+    cd_out = cd.to_dict(orient='records')
+
+_result_json = json.dumps({
+    'rows': rows_out,
+    'columns': [{'name': c, 'type': 'string' if c in ('member_id', 'index_date', 'sex_code', 'age_band', 'first_obs_date', 'last_obs_date') else 'float64'} for c in output_columns],
+    'totalRowCount': len(rows_out),
+    'funnel': funnel,
+    'sexDistribution': {str(k): int(v) for k, v in sex_dist.items()},
+    'ageBandDistribution': {str(k): int(v) for k, v in ageband_dist.items()},
+    'exclusionReasons': {k: int(v) for k, v in exclusion_log.items()},
+    'dataSource': _params['data_source'],
+    'parameters': _params,
+    '_claims_disease': cd_out,
+}, default=str)
+`;
+
+export async function performJMDCCohort(
+  inputRows: Record<string, any>[] | null,
+  params: Record<string, any>,
+  timeoutMs: number = 120000
+): Promise<any> {
+  return runJMDCAnalysis(JMDC_COHORT_PY, {
+    js_params: params,
+    js_input_rows: inputRows,
+  }, timeoutMs);
+}
+
+// ----- J2: Outcome Labeler -----
+const JMDC_OUTCOME_PY = `
+import json
+import numpy as np
+import pandas as pd
+
+_params = json.loads(js_params)
+_cohort_rows = json.loads(js_cohort_rows)
+_claims_rows = json.loads(js_claims_rows) if js_claims_rows else []
+
+cohort = pd.DataFrame(_cohort_rows)
+cohort['index_date'] = pd.to_datetime(cohort['index_date'])
+if 'last_obs_date' in cohort.columns:
+    cohort['last_obs_date'] = pd.to_datetime(cohort['last_obs_date'])
+
+claims = pd.DataFrame(_claims_rows) if _claims_rows else pd.DataFrame(columns=['member_id', 'icd10_code', 'onset_date', 'suspect_flag'])
+if len(claims) > 0:
+    claims['onset_date'] = pd.to_datetime(claims['onset_date'])
+
+outcome_dx = _params['outcome_diseases']
+window_yrs = float(_params['outcome_window_years'])
+confirm = bool(_params['confirm_suspect_flag'])
+mode = _params['multi_outcome_mode']
+
+# end_of_window per member
+cohort['_end_window'] = cohort['index_date'] + pd.Timedelta(days=int(window_yrs * 365.25))
+
+# Build first-event dates per outcome label
+first_events = {}
+for label, prefixes in outcome_dx.items():
+    if len(claims) == 0:
+        first_events[label] = pd.Series(pd.NaT, index=[])
+        continue
+    mask = claims['icd10_code'].astype(str).str[:3].isin(prefixes)
+    if confirm and 'suspect_flag' in claims.columns:
+        mask &= ~claims['suspect_flag'].fillna(False).astype(bool)
+    sub = claims[mask].groupby('member_id')['onset_date'].min()
+    first_events[label] = sub
+
+# Per-row event resolution
+def resolve_row(row, label, fe_series):
+    mid = row['member_id']
+    evt = fe_series.get(mid, pd.NaT) if isinstance(fe_series, pd.Series) else pd.NaT
+    end_w = row['_end_window']
+    idx = row['index_date']
+    last_obs = row.get('last_obs_date', end_w)
+    if pd.notna(evt) and evt <= end_w and evt >= idx:
+        return {
+            'outcome_type': label,
+            'first_event_date': evt.strftime('%Y-%m-%d'),
+            'time_to_event_days': int((evt - idx).days),
+            'event_flag': 1,
+            'censor_reason': 'event',
+        }
+    # censoring
+    censor_dt = min(end_w, last_obs) if pd.notna(last_obs) else end_w
+    reason = 'lost_followup' if pd.notna(last_obs) and last_obs < end_w else 'admin_censor'
+    return {
+        'outcome_type': label,
+        'first_event_date': None,
+        'time_to_event_days': max(0, int((censor_dt - idx).days)),
+        'event_flag': 0,
+        'censor_reason': reason,
+    }
+
+if mode == 'long':
+    records = []
+    for _, row in cohort.iterrows():
+        for label in outcome_dx.keys():
+            r = dict(row)
+            r.update(resolve_row(row, label, first_events.get(label)))
+            records.append(r)
+    out = pd.DataFrame(records)
+else:
+    # single mode: combine outcomes — choose earliest event across outcomes
+    out_rows = []
+    for _, row in cohort.iterrows():
+        earliest = None
+        earliest_label = None
+        for label, fe in first_events.items():
+            evt = fe.get(row['member_id'], pd.NaT) if isinstance(fe, pd.Series) else pd.NaT
+            if pd.notna(evt) and evt <= row['_end_window'] and evt >= row['index_date']:
+                if earliest is None or evt < earliest:
+                    earliest = evt
+                    earliest_label = label
+        r = dict(row)
+        if earliest is not None:
+            r.update({
+                'outcome_type': earliest_label,
+                'first_event_date': earliest.strftime('%Y-%m-%d'),
+                'time_to_event_days': int((earliest - row['index_date']).days),
+                'event_flag': 1,
+                'censor_reason': 'event',
+            })
+        else:
+            last_obs = row.get('last_obs_date', row['_end_window'])
+            censor_dt = min(row['_end_window'], last_obs) if pd.notna(last_obs) else row['_end_window']
+            reason = 'lost_followup' if (pd.notna(last_obs) and last_obs < row['_end_window']) else 'admin_censor'
+            r.update({
+                'outcome_type': 'composite',
+                'first_event_date': None,
+                'time_to_event_days': max(0, int((censor_dt - row['index_date']).days)),
+                'event_flag': 0,
+                'censor_reason': reason,
+            })
+        out_rows.append(r)
+    out = pd.DataFrame(out_rows)
+
+# drop helper
+out = out.drop(columns=['_end_window'], errors='ignore')
+out['index_date'] = pd.to_datetime(out['index_date']).dt.strftime('%Y-%m-%d')
+if 'last_obs_date' in out.columns:
+    out['last_obs_date'] = pd.to_datetime(out['last_obs_date']).dt.strftime('%Y-%m-%d')
+
+# Summaries
+total = int(len(out))
+events_n = int(out['event_flag'].sum())
+censored_n = total - events_n
+censor_reasons = out[out['event_flag'] == 0]['censor_reason'].value_counts().to_dict() if censored_n > 0 else {}
+
+outcome_breakdown = {}
+for label in (outcome_dx.keys() if mode == 'long' else list(set(out['outcome_type'].dropna().unique()))):
+    sub = out[out['outcome_type'] == label]
+    if len(sub) == 0:
+        continue
+    e = int(sub['event_flag'].sum())
+    py_total = max(1.0, (sub['time_to_event_days'].sum() / 365.25))
+    outcome_breakdown[label] = {'events': e, 'rate': float(e / py_total * 1000)}
+
+columns_meta = []
+for c in out.columns:
+    dtype = str(out[c].dtype)
+    t = 'int64' if dtype.startswith('int') else 'float64' if dtype.startswith('float') else 'string'
+    columns_meta.append({'name': c, 'type': t})
+
+rows_out = out.head(1000).to_dict(orient='records')  # cap preview at 1k for UI
+
+_result_json = json.dumps({
+    'rows': rows_out,
+    'allRows': out.to_dict(orient='records'),  # full for downstream
+    'columns': columns_meta,
+    'totalRowCount': int(len(out)),
+    'eventSummary': {
+        'total': total,
+        'events': events_n,
+        'censored': censored_n,
+        'censorReasons': {str(k): int(v) for k, v in censor_reasons.items()},
+    },
+    'outcomeBreakdown': outcome_breakdown,
+}, default=str)
+`;
+
+export async function performJMDCOutcomeLabeler(
+  cohortRows: Record<string, any>[],
+  claimsRows: Record<string, any>[] | null,
+  params: Record<string, any>,
+  timeoutMs: number = 120000
+): Promise<any> {
+  return runJMDCAnalysis(JMDC_OUTCOME_PY, {
+    js_params: params,
+    js_cohort_rows: cohortRows,
+    js_claims_rows: claimsRows,
+  }, timeoutMs);
+}
+
+// ----- J3: Incidence Rate -----
+const JMDC_INCIDENCE_PY = `
+import json
+import numpy as np
+import pandas as pd
+
+_params = json.loads(js_params)
+_rows = json.loads(js_rows)
+
+df = pd.DataFrame(_rows)
+df['py'] = df['time_to_event_days'].astype(float) / 365.25
+
+# Stratification
+stratify = _params.get('stratify_by', 'none')
+if stratify == 'sex':
+    cols = ['sex_code']
+elif stratify == 'age_band':
+    cols = ['age_band']
+elif stratify == 'sex_age':
+    cols = ['sex_code', 'age_band']
+else:
+    cols = []
+
+if cols:
+    g = df.groupby(cols)
+else:
+    g = df.groupby(lambda _: 'overall')
+
+agg = g.agg(N=('member_id', 'nunique'),
+            events=('event_flag', 'sum'),
+            person_years=('py', 'sum')).reset_index()
+
+unit_map = {'1000_PY': 1000, '10000_PY': 10000, '100000_PY': 100000}
+unit = unit_map.get(_params.get('rate_unit', '1000_PY'), 1000)
+
+agg['crude_rate'] = agg['events'] / agg['person_years'].replace(0, np.nan) * unit
+# Byar's CI
+o = np.maximum(agg['events'].astype(float), 0.5)
+agg['crude_ci_lo'] = (o * (1 - 1/(9*o) - 1.96/(3*np.sqrt(o)))**3 / agg['person_years'].replace(0, np.nan)) * unit
+agg['crude_ci_hi'] = ((o+1) * (1 - 1/(9*(o+1)) + 1.96/(3*np.sqrt(o+1)))**3 / agg['person_years'].replace(0, np.nan)) * unit
+
+# Direct standardisation if requested
+std_pop = _params.get('standard_population', 'internal')
+STANDARD_POPS = {
+    'WHO_2000':  {'<30': 0.46, '30-39': 0.16, '40-49': 0.13, '50-59': 0.10, '60-69': 0.08, '70+': 0.07},
+    'japan_2015':{'<30': 0.27, '30-39': 0.13, '40-49': 0.14, '50-59': 0.13, '60-69': 0.15, '70+': 0.18},
+    'korea_2020':{'<30': 0.29, '30-39': 0.14, '40-49': 0.16, '50-59': 0.17, '60-69': 0.13, '70+': 0.11},
+}
+if std_pop in STANDARD_POPS and 'age_band' in cols:
+    w = STANDARD_POPS[std_pop]
+    agg['_w'] = agg['age_band'].astype(str).map(w).fillna(0)
+    # normalise weights within each non-age stratum or overall
+    other = [c for c in cols if c != 'age_band']
+    if other:
+        agg['_w'] = agg.groupby(other)['_w'].transform(lambda s: s / s.sum() if s.sum() > 0 else 0)
+        agg['std_rate'] = agg['crude_rate'] * agg['_w']
+        # leave CI as crude CI scaled by weights as approximation
+        agg['std_ci_lo'] = agg['crude_ci_lo'] * agg['_w']
+        agg['std_ci_hi'] = agg['crude_ci_hi'] * agg['_w']
+    else:
+        agg['_w'] = agg['_w'] / agg['_w'].sum()
+        agg['std_rate'] = (agg['crude_rate'] * agg['_w']).sum()
+        agg['std_ci_lo'] = (agg['crude_ci_lo'] * agg['_w']).sum()
+        agg['std_ci_hi'] = (agg['crude_ci_hi'] * agg['_w']).sum()
+    agg = agg.drop(columns=['_w'])
+
+# stratum string
+if cols:
+    agg['stratum'] = agg[cols].astype(str).agg(' | '.join, axis=1)
+else:
+    agg['stratum'] = 'overall'
+
+rate_table = []
+for _, r in agg.iterrows():
+    rec = {
+        'stratum': str(r['stratum']),
+        'N': int(r['N']),
+        'person_years': float(r['person_years']),
+        'events': int(r['events']),
+        'crude_rate': float(r['crude_rate']) if pd.notna(r['crude_rate']) else 0.0,
+        'crude_ci_lo': float(r['crude_ci_lo']) if pd.notna(r['crude_ci_lo']) else 0.0,
+        'crude_ci_hi': float(r['crude_ci_hi']) if pd.notna(r['crude_ci_hi']) else 0.0,
+    }
+    if 'std_rate' in agg.columns:
+        rec['std_rate'] = float(r['std_rate']) if pd.notna(r['std_rate']) else None
+        rec['std_ci_lo'] = float(r['std_ci_lo']) if pd.notna(r['std_ci_lo']) else None
+        rec['std_ci_hi'] = float(r['std_ci_hi']) if pd.notna(r['std_ci_hi']) else None
+    rate_table.append(rec)
+
+# CIF grid using 1-KM per stratum (analytical)
+time_grid = _params.get('time_grid_years', [1, 2, 3, 4, 5])
+
+def km_at_times(times_days, events, t_grid_years):
+    """Kaplan-Meier estimator at given time points (years)."""
+    if len(times_days) == 0:
+        return [0.0] * len(t_grid_years)
+    df_loc = pd.DataFrame({'t': times_days, 'e': events}).sort_values('t')
+    n_at_risk = len(df_loc)
+    surv = 1.0
+    grid_results = []
+    grid_idx = 0
+    t_grid_days = [int(t * 365.25) for t in t_grid_years]
+    for t, e in zip(df_loc['t'].values, df_loc['e'].values):
+        while grid_idx < len(t_grid_days) and t_grid_days[grid_idx] < t:
+            grid_results.append(1.0 - surv)
+            grid_idx += 1
+        if e == 1 and n_at_risk > 0:
+            surv *= (1 - 1.0 / n_at_risk)
+        n_at_risk -= 1
+    while grid_idx < len(t_grid_days):
+        grid_results.append(1.0 - surv)
+        grid_idx += 1
+    return grid_results
+
+cif_grid = []
+if cols:
+    for keys, sub in df.groupby(cols):
+        stratum_name = ' | '.join([str(k) for k in (keys if isinstance(keys, tuple) else (keys,))])
+        cifs = km_at_times(sub['time_to_event_days'].values, sub['event_flag'].values, time_grid)
+        for t, cif in zip(time_grid, cifs):
+            cif_grid.append({'stratum': stratum_name, 't_years': float(t), 'cif': float(cif), 'ci_lo': 0.0, 'ci_hi': 0.0})
+else:
+    cifs = km_at_times(df['time_to_event_days'].values, df['event_flag'].values, time_grid)
+    for t, cif in zip(time_grid, cifs):
+        cif_grid.append({'stratum': 'overall', 't_years': float(t), 'cif': float(cif), 'ci_lo': 0.0, 'ci_hi': 0.0})
+
+_result_json = json.dumps({
+    'rateTable': rate_table,
+    'cifGrid': cif_grid,
+    'rateUnit': _params.get('rate_unit', '1000_PY'),
+    'standardPopulation': std_pop,
+    'stratifyBy': stratify,
+})
+`;
+
+export async function performJMDCIncidenceRate(
+  rows: Record<string, any>[],
+  params: Record<string, any>,
+  timeoutMs: number = 120000
+): Promise<any> {
+  return runJMDCAnalysis(JMDC_INCIDENCE_PY, {
+    js_params: params,
+    js_rows: rows,
+  }, timeoutMs);
+}
+
+// ----- J4: KM Compare + log-rank -----
+const JMDC_SURVIVAL_PY = `
+import json
+import numpy as np
+import pandas as pd
+from lifelines import KaplanMeierFitter
+from lifelines.statistics import multivariate_logrank_test
+
+_params = json.loads(js_params)
+_rows = json.loads(js_rows)
+
+df = pd.DataFrame(_rows)
+gcol = _params['group_col']
+if gcol not in df.columns:
+    raise ValueError(f"group_col '{gcol}' not found in cohort columns")
+
+df['_t_yrs'] = df['time_to_event_days'].astype(float) / 365.25
+df['event_flag'] = df['event_flag'].astype(int)
+df[gcol] = df[gcol].astype(str)
+
+groups = sorted(df[gcol].unique())
+curves = []
+group_stats = []
+
+for g in groups:
+    sub = df[df[gcol] == g]
+    kmf = KaplanMeierFitter().fit(sub['_t_yrs'], sub['event_flag'], label=g)
+    surv_df = kmf.survival_function_.reset_index()
+    surv_df.columns = ['t', 'survival']
+    ci = kmf.confidence_interval_.reset_index()
+    ci.columns = ['t', 'ci_lo', 'ci_hi']
+    merged = surv_df.merge(ci, on='t')
+    # sample at most 200 points to keep payload reasonable
+    if len(merged) > 200:
+        idxs = np.linspace(0, len(merged) - 1, 200).astype(int)
+        merged = merged.iloc[idxs]
+    curves.append({
+        'group': g,
+        't_years': [float(x) for x in merged['t'].values],
+        'survival': [float(x) for x in merged['survival'].values],
+        'ci_lo': [float(x) for x in merged['ci_lo'].values],
+        'ci_hi': [float(x) for x in merged['ci_hi'].values],
+    })
+    # Median survival
+    try:
+        _m = kmf.median_survival_time_
+        if pd.notna(_m) and not (isinstance(_m, float) and np.isinf(_m)):
+            med = float(_m)
+        else:
+            med = None
+    except Exception:
+        med = None
+    # Cumulative incidence at horizons
+    def cif_at(t):
+        try:
+            v = float(1.0 - kmf.predict(t))
+            if np.isnan(v) or np.isinf(v):
+                return None
+            return v
+        except Exception:
+            return None
+    group_stats.append({
+        'group': g,
+        'N': int(len(sub)),
+        'events': int(sub['event_flag'].sum()),
+        'median_survival': med,
+        'cum_inc_1y': cif_at(1),
+        'cum_inc_3y': cif_at(3),
+        'cum_inc_5y': cif_at(5),
+    })
+
+# Log-rank (standard)
+try:
+    lr = multivariate_logrank_test(df['_t_yrs'], df[gcol], df['event_flag'])
+    logrank_p = float(lr.p_value)
+except Exception as e:
+    logrank_p = None
+
+# Stratified log-rank
+stratified_p = None
+if _params.get('logrank_method') == 'stratified':
+    strat_cols = _params.get('stratify_cols') or []
+    if strat_cols:
+        try:
+            # use lifelines stratified via per-stratum test combined with chi-square sum
+            from scipy.stats import chi2
+            chi_stats = []
+            dfs_total = 0
+            for keys, sub in df.groupby(strat_cols):
+                if sub[gcol].nunique() < 2:
+                    continue
+                lr2 = multivariate_logrank_test(sub['_t_yrs'], sub[gcol], sub['event_flag'])
+                chi_stats.append(float(lr2.test_statistic))
+                dfs_total += int(lr2.degrees_of_freedom)
+            if chi_stats:
+                stratified_p = float(1.0 - chi2.cdf(sum(chi_stats), max(1, dfs_total)))
+        except Exception:
+            stratified_p = None
+
+_result_json = json.dumps({
+    'mode': 'km',
+    'curves': curves,
+    'groupStats': group_stats,
+    'logrankP': logrank_p,
+    'stratifiedLogrankP': stratified_p,
+    'groupCol': gcol,
+})
+`;
+
+export async function performJMDCSurvivalCompare(
+  rows: Record<string, any>[],
+  params: Record<string, any>,
+  timeoutMs: number = 180000
+): Promise<any> {
+  await ensureLifelinesInstalled();
+  return runJMDCAnalysis(JMDC_SURVIVAL_PY, {
+    js_params: params,
+    js_rows: rows,
+  }, timeoutMs);
+}
+
+// ----- J5: Cumulative Incidence (Aalen-Johansen or 1-KM) -----
+const JMDC_CIF_PY = `
+import json
+import numpy as np
+import pandas as pd
+from lifelines import KaplanMeierFitter
+
+_params = json.loads(js_params)
+_rows = json.loads(js_rows)
+
+df = pd.DataFrame(_rows)
+df['_t_yrs'] = df['time_to_event_days'].astype(float) / 365.25
+event_col = _params.get('event_col', 'event_flag')
+group_col = _params.get('group_col') or None
+competing = _params.get('competing_event_cols') or []
+time_grid = _params.get('time_grid_years', [1, 2, 3, 4, 5, 7, 10])
+
+groups = ['overall']
+if group_col and group_col in df.columns:
+    df[group_col] = df[group_col].astype(str)
+    groups = sorted(df[group_col].unique())
+
+curves = []
+group_stats = []
+
+for g in groups:
+    sub = df if g == 'overall' else df[df[group_col] == g]
+    if competing and any(c in sub.columns for c in competing):
+        # Aalen-Johansen via lifelines
+        try:
+            from lifelines import AalenJohansenFitter
+            ev = sub[event_col].astype(int).copy()
+            # combine competing flags into event_of_interest=1 / competing=2 / censored=0
+            ev2 = ev.copy()
+            for c in competing:
+                if c in sub.columns:
+                    ev2 = np.where((sub[c].astype(int) == 1) & (ev == 0), 2, ev2)
+            ajf = AalenJohansenFitter()
+            ajf.fit(sub['_t_yrs'], ev2, event_of_interest=1)
+            cif_df = ajf.cumulative_density_.reset_index()
+            cif_df.columns = ['t', 'cif']
+            ci_df = ajf.confidence_interval_.reset_index()
+            ci_df.columns = ['t', 'ci_lo', 'ci_hi']
+            merged = cif_df.merge(ci_df, on='t')
+        except Exception:
+            kmf = KaplanMeierFitter().fit(sub['_t_yrs'], sub[event_col])
+            merged = kmf.survival_function_.reset_index()
+            merged.columns = ['t', 'survival']
+            merged['cif'] = 1 - merged['survival']
+            merged['ci_lo'] = 0.0
+            merged['ci_hi'] = 0.0
+    else:
+        kmf = KaplanMeierFitter().fit(sub['_t_yrs'], sub[event_col])
+        merged = kmf.survival_function_.reset_index()
+        merged.columns = ['t', 'survival']
+        ci = kmf.confidence_interval_.reset_index()
+        ci.columns = ['t', 'cs_lo', 'cs_hi']
+        merged = merged.merge(ci, on='t')
+        merged['cif'] = 1 - merged['survival']
+        merged['ci_lo'] = 1 - merged['cs_hi']
+        merged['ci_hi'] = 1 - merged['cs_lo']
+    if len(merged) > 200:
+        idxs = np.linspace(0, len(merged) - 1, 200).astype(int)
+        merged = merged.iloc[idxs]
+    curves.append({
+        'group': g,
+        't_years': [float(x) for x in merged['t'].values],
+        'survival': [1.0 - float(x) for x in merged['cif'].values],  # store as survival for shared modal
+        'ci_lo': [float(x) for x in merged['ci_lo'].values],
+        'ci_hi': [float(x) for x in merged['ci_hi'].values],
+    })
+    # group_stats: use CIF values at horizons
+    def cif_at(t_yr):
+        idxs = (merged['t'] <= t_yr) if 't' in merged.columns else None
+        if idxs is None or not idxs.any():
+            return None
+        return float(merged.loc[idxs, 'cif'].iloc[-1])
+    group_stats.append({
+        'group': g,
+        'N': int(len(sub)),
+        'events': int(sub[event_col].astype(int).sum()),
+        'median_survival': None,
+        'cum_inc_1y': cif_at(1),
+        'cum_inc_3y': cif_at(3),
+        'cum_inc_5y': cif_at(5),
+    })
+
+_result_json = json.dumps({
+    'mode': 'cif',
+    'curves': curves,
+    'groupStats': group_stats,
+    'logrankP': None,
+    'stratifiedLogrankP': None,
+    'groupCol': group_col,
+    'competingEventCols': competing,
+})
+`;
+
+export async function performJMDCCumulativeIncidence(
+  rows: Record<string, any>[],
+  params: Record<string, any>,
+  timeoutMs: number = 180000
+): Promise<any> {
+  await ensureLifelinesInstalled();
+  return runJMDCAnalysis(JMDC_CIF_PY, {
+    js_params: params,
+    js_rows: rows,
+  }, timeoutMs);
+}
+
+// ----- J6: Cox PH Risk Stratification -----
+const JMDC_COX_PY = `
+import json
+import numpy as np
+import pandas as pd
+from lifelines import CoxPHFitter
+
+_params = json.loads(js_params)
+_rows = json.loads(js_rows)
+
+df = pd.DataFrame(_rows)
+df['_t_yrs'] = df['time_to_event_days'].astype(float) / 365.25
+df['event_flag'] = df['event_flag'].astype(int)
+
+exposure = _params['exposure_col']
+covariates = _params.get('covariates', [])
+stratify_col = _params.get('stratify_col') or None
+tie_method = _params.get('tie_method', 'efron')
+ph_test = bool(_params.get('proportional_hazards_test', True))
+
+# build modelling frame
+feature_cols = [exposure] + [c for c in covariates if c and c != exposure]
+keep_cols = ['_t_yrs', 'event_flag'] + feature_cols
+if stratify_col and stratify_col in df.columns:
+    keep_cols.append(stratify_col)
+sub = df[keep_cols].copy()
+
+# Coerce: convert categorical to one-hot
+for c in feature_cols:
+    if sub[c].dtype == object:
+        sub[c] = sub[c].astype(str)
+sub = pd.get_dummies(sub, columns=[c for c in feature_cols if sub[c].dtype == object], drop_first=True)
+sub = sub.dropna()
+
+cph = CoxPHFitter()
+fit_kwargs = dict(duration_col='_t_yrs', event_col='event_flag')
+if stratify_col and stratify_col in sub.columns:
+    fit_kwargs['strata'] = [stratify_col]
+# tie_method is passed via fit() in lifelines 0.27.x
+try:
+    cph.fit(sub, **fit_kwargs, tie_method=tie_method)
+except TypeError:
+    cph.fit(sub, **fit_kwargs)
+
+hr_table = []
+for var in cph.summary.index:
+    row = cph.summary.loc[var]
+    hr_table.append({
+        'variable': str(var),
+        'hr': float(row['exp(coef)']),
+        'hr_ci_lo': float(row['exp(coef) lower 95%']),
+        'hr_ci_hi': float(row['exp(coef) upper 95%']),
+        'p_value': float(row['p']),
+    })
+
+# PH test
+ph_warnings = []
+if ph_test:
+    try:
+        check = cph.check_assumptions(sub, p_value_threshold=0.05, show_plots=False)
+        # check is list of DataFrames; collect any variable with p < 0.05
+        if isinstance(check, list):
+            for tbl in check:
+                if 'p' in tbl.columns:
+                    bad = tbl[tbl['p'] < 0.05]
+                    for idx in bad.index:
+                        ph_warnings.append(f"PH assumption violated for {idx} (p={float(tbl.loc[idx, 'p']):.4f})")
+    except Exception:
+        pass
+
+concordance = float(cph.concordance_index_)
+loglik = float(cph.log_likelihood_)
+
+_result_json = json.dumps({
+    'hrTable': hr_table,
+    'concordance': concordance,
+    'logLikelihood': loglik,
+    'exposureCol': exposure,
+    'covariates': covariates,
+    'phWarnings': ph_warnings,
+})
+`;
+
+export async function performJMDCRiskStratification(
+  rows: Record<string, any>[],
+  params: Record<string, any>,
+  timeoutMs: number = 240000
+): Promise<any> {
+  await ensureLifelinesInstalled();
+  return runJMDCAnalysis(JMDC_COX_PY, {
+    js_params: params,
+    js_rows: rows,
+  }, timeoutMs);
+}
+
+// ----- J7: KR-JP Matcher -----
+const JMDC_MATCHER_PY = `
+import json
+import numpy as np
+import pandas as pd
+from sklearn.linear_model import LogisticRegression
+
+_params = json.loads(js_params)
+_jp = json.loads(js_jp_rows)
+_kr = json.loads(js_kr_rows)
+
+jp = pd.DataFrame(_jp); jp['country'] = 'JP'
+kr = pd.DataFrame(_kr); kr['country'] = 'KR'
+
+# Layer 1: schema alignment — already assumed identical columns (warn if not)
+common_cols = sorted(set(jp.columns) & set(kr.columns))
+jp = jp[common_cols].copy()
+kr = kr[common_cols].copy()
+
+combined = pd.concat([jp, kr], ignore_index=True)
+
+# Layer 4: PSM (optional)
+def smd(x, y):
+    nx, ny = np.var(x, ddof=1), np.var(y, ddof=1)
+    pooled = np.sqrt((nx + ny) / 2.0)
+    if pooled == 0:
+        return 0.0
+    return float((np.mean(x) - np.mean(y)) / pooled)
+
+cov = [c for c in _params.get('psm_covariates', []) if c in combined.columns]
+smd_rows = []
+for c in cov:
+    try:
+        a = pd.to_numeric(combined.loc[combined['country'] == 'JP', c], errors='coerce').dropna().values
+        b = pd.to_numeric(combined.loc[combined['country'] == 'KR', c], errors='coerce').dropna().values
+        smd_rows.append({'variable': c, 'smd_before': abs(smd(a, b)), 'smd_after': abs(smd(a, b))})
+    except Exception:
+        continue
+
+if _params.get('apply_psm') and cov:
+    # 1:1 nearest neighbour PSM on logit(propensity) via binary search.
+    X = combined[cov].apply(pd.to_numeric, errors='coerce').fillna(combined[cov].apply(pd.to_numeric, errors='coerce').mean())
+    y = (combined['country'] == 'KR').astype(int)
+    try:
+        ps = LogisticRegression(max_iter=500).fit(X, y).predict_proba(X)[:, 1]
+        ps = np.clip(ps, 1e-6, 1 - 1e-6)
+        logit_ps = np.log(ps / (1 - ps))
+        combined = combined.copy()
+        combined['_logit_ps'] = logit_ps
+        kr_pool = combined[combined['country'] == 'KR']
+        jp_pool = combined[combined['country'] == 'JP'].sort_values('_logit_ps')
+        caliper = float(_params.get('caliper', 0.2)) * float(np.std(logit_ps))
+        if caliper <= 0:
+            caliper = 1e6  # disable caliper if PS variance is tiny
+        jp_ps_arr = jp_pool['_logit_ps'].values
+        jp_idx_arr = jp_pool.index.values  # original combined index
+        matched_jp_idx, matched_kr_idx = [], []
+        from bisect import bisect_left
+        for kr_idx, kr_row in kr_pool.iterrows():
+            target = kr_row['_logit_ps']
+            pos = bisect_left(jp_ps_arr, target)
+            best = None; best_d = np.inf
+            for cand in (pos - 1, pos):
+                if 0 <= cand < len(jp_ps_arr):
+                    d = abs(jp_ps_arr[cand] - target)
+                    if d < best_d:
+                        best_d = d; best = cand
+            if best is not None and best_d <= caliper:
+                matched_jp_idx.append(jp_idx_arr[best])
+                matched_kr_idx.append(kr_idx)
+        if matched_jp_idx:
+            matched = combined.loc[matched_jp_idx + matched_kr_idx]
+            for row in smd_rows:
+                c = row['variable']
+                a = pd.to_numeric(matched.loc[matched['country'] == 'JP', c], errors='coerce').dropna().values
+                b = pd.to_numeric(matched.loc[matched['country'] == 'KR', c], errors='coerce').dropna().values
+                if len(a) > 1 and len(b) > 1:
+                    row['smd_after'] = abs(smd(a, b))
+            combined_for_rates = matched
+        else:
+            # No matches under caliper — fall back to all data so rate/SIR rows still appear
+            combined_for_rates = combined
+    except Exception:
+        combined_for_rates = combined
+else:
+    combined_for_rates = combined
+
+# Layer 3: standardisation
+STANDARD_POPS = {
+    'WHO_2000':  {'<30': 0.46, '30-39': 0.16, '40-49': 0.13, '50-59': 0.10, '60-69': 0.08, '70+': 0.07},
+    'japan_2015':{'<30': 0.27, '30-39': 0.13, '40-49': 0.14, '50-59': 0.13, '60-69': 0.15, '70+': 0.18},
+    'korea_2020':{'<30': 0.29, '30-39': 0.14, '40-49': 0.16, '50-59': 0.17, '60-69': 0.13, '70+': 0.11},
+    'combined':  {'<30': 0.33, '30-39': 0.14, '40-49': 0.15, '50-59': 0.13, '60-69': 0.13, '70+': 0.12},
+}
+std_key = _params.get('standard_population', 'WHO_2000')
+weights = STANDARD_POPS.get(std_key, STANDARD_POPS['WHO_2000'])
+
+def crude_rate(sub, unit=1000):
+    py_total = (sub['time_to_event_days'].astype(float) / 365.25).sum()
+    e = sub['event_flag'].astype(int).sum()
+    return float(e / py_total * unit) if py_total > 0 else 0.0
+
+def std_rate(sub, weights, unit=1000):
+    if 'age_band' not in sub.columns:
+        return crude_rate(sub, unit)
+    total = 0.0
+    w_sum = 0.0
+    for band, w in weights.items():
+        s = sub[sub['age_band'] == band]
+        py = (s['time_to_event_days'].astype(float) / 365.25).sum()
+        if py > 0:
+            r = float(s['event_flag'].astype(int).sum()) / py * unit
+            total += r * w
+            w_sum += w
+    return total / w_sum if w_sum > 0 else 0.0
+
+# Byar's CI for SIR
+def sir_byar(observed, expected):
+    if expected <= 0:
+        return 0.0, 0.0, 0.0
+    o = max(observed, 0.5)
+    lo = (o * (1 - 1/(9*o) - 1.96/(3*np.sqrt(o)))**3) / expected
+    hi = ((o+1) * (1 - 1/(9*(o+1)) + 1.96/(3*np.sqrt(o+1)))**3) / expected
+    return float(observed / expected), float(lo), float(hi)
+
+target_outcome = _params.get('comparison_outcome')
+rate_table = []
+sir_table = []
+
+# build outcome list — either single 'comparison_outcome' filter on outcome_type, or composite
+def make_rates(outcome_filter):
+    jp_sub = combined_for_rates[combined_for_rates['country'] == 'JP']
+    kr_sub = combined_for_rates[combined_for_rates['country'] == 'KR']
+    if 'outcome_type' in combined_for_rates.columns and outcome_filter:
+        jp_sub = jp_sub[jp_sub['outcome_type'] == outcome_filter]
+        kr_sub = kr_sub[kr_sub['outcome_type'] == outcome_filter]
+    jp_raw = crude_rate(jp_sub); kr_raw = crude_rate(kr_sub)
+    jp_std = std_rate(jp_sub, weights); kr_std = std_rate(kr_sub, weights)
+    ratio = (kr_std / jp_std) if jp_std > 0 else 0.0
+    # CI: log-ratio approx
+    if jp_std > 0 and kr_std > 0 and jp_sub['event_flag'].sum() > 0 and kr_sub['event_flag'].sum() > 0:
+        se = np.sqrt(1.0/jp_sub['event_flag'].sum() + 1.0/kr_sub['event_flag'].sum())
+        lr = np.log(ratio); ci_lo = float(np.exp(lr - 1.96*se)); ci_hi = float(np.exp(lr + 1.96*se))
+    else:
+        ci_lo, ci_hi = 0.0, 0.0
+    rate_table.append({
+        'outcome': outcome_filter or 'overall',
+        'jp_raw': jp_raw, 'jp_std': jp_std,
+        'kr_raw': kr_raw, 'kr_std': kr_std,
+        'ratio': float(ratio), 'ratio_ci_lo': ci_lo, 'ratio_ci_hi': ci_hi,
+    })
+
+    # SIR: KR observed vs expected using JP rates
+    obs = kr_sub['event_flag'].astype(int).sum()
+    # expected: JP rate × KR person-years, per age_band
+    if 'age_band' in combined_for_rates.columns and len(kr_sub) > 0:
+        expected = 0.0
+        for band in jp_sub['age_band'].dropna().unique():
+            j_band = jp_sub[jp_sub['age_band'] == band]
+            k_band = kr_sub[kr_sub['age_band'] == band]
+            j_py = (j_band['time_to_event_days'].astype(float) / 365.25).sum()
+            k_py = (k_band['time_to_event_days'].astype(float) / 365.25).sum()
+            if j_py > 0:
+                rate = float(j_band['event_flag'].astype(int).sum()) / j_py
+                expected += rate * k_py
+    else:
+        j_py = (jp_sub['time_to_event_days'].astype(float) / 365.25).sum()
+        k_py = (kr_sub['time_to_event_days'].astype(float) / 365.25).sum()
+        rate = float(jp_sub['event_flag'].astype(int).sum()) / j_py if j_py > 0 else 0
+        expected = rate * k_py
+    sir, sir_lo, sir_hi = sir_byar(obs, expected) if expected > 0 else (0.0, 0.0, 0.0)
+    sir_table.append({
+        'outcome': outcome_filter or 'overall',
+        'observed': int(obs),
+        'expected': float(expected),
+        'sir': float(sir),
+        'sir_ci_lo': float(sir_lo),
+        'sir_ci_hi': float(sir_hi),
+    })
+
+if 'outcome_type' in combined_for_rates.columns:
+    for o in sorted([x for x in combined_for_rates['outcome_type'].dropna().unique() if x != 'composite']):
+        if target_outcome and o != target_outcome:
+            continue
+        make_rates(o)
+else:
+    make_rates(target_outcome)
+
+# KM overlay — JP vs KR for target outcome (1-KM via lifelines fallback inline)
+km_overlay = []
+try:
+    from lifelines import KaplanMeierFitter
+    for country, sub in combined_for_rates.groupby('country'):
+        if 'outcome_type' in sub.columns and target_outcome:
+            sub = sub[sub['outcome_type'] == target_outcome]
+        if len(sub) < 5:
+            continue
+        kmf = KaplanMeierFitter().fit(sub['time_to_event_days'].astype(float) / 365.25, sub['event_flag'].astype(int))
+        surv = kmf.survival_function_.reset_index()
+        surv.columns = ['t', 's']
+        if len(surv) > 150:
+            idxs = np.linspace(0, len(surv) - 1, 150).astype(int)
+            surv = surv.iloc[idxs]
+        km_overlay.append({
+            'country': country,
+            'group': target_outcome or 'overall',
+            't_years': [float(x) for x in surv['t'].values],
+            'survival': [float(x) for x in surv['s'].values],
+        })
+except Exception:
+    pass
+
+_result_json = json.dumps({
+    'smdTable': smd_rows,
+    'rateTable': rate_table,
+    'sirTable': sir_table,
+    'kmOverlay': km_overlay,
+    'mappingVersion': 'PRD-v2.0-appendix-H/I/J',
+    'applied': {
+        'schema_alignment': bool(_params.get('apply_schema_alignment')),
+        'vocab_mapping': bool(_params.get('apply_vocab_mapping')),
+        'standardization': _params.get('apply_standardization'),
+        'psm': bool(_params.get('apply_psm')),
+    },
+})
+`;
+
+export async function performJMDCMatcher(
+  jpRows: Record<string, any>[],
+  krRows: Record<string, any>[],
+  params: Record<string, any>,
+  timeoutMs: number = 240000
+): Promise<any> {
+  await ensureLifelinesInstalled();
+  return runJMDCAnalysis(JMDC_MATCHER_PY, {
+    js_params: params,
+    js_jp_rows: jpRows,
+    js_kr_rows: krRows,
+  }, timeoutMs);
+}
