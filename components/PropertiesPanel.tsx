@@ -41,6 +41,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { DEFAULT_MODULES } from "../constants";
 import { ExcelInputModal } from "./ExcelInputModal";
 import { DataAnalysisRAGModal } from "./DataAnalysisRAGModal";
+import { ModuleDescriptionModal } from "./ModuleDescriptionModal";
 import { useTheme } from "../contexts/ThemeContext";
 import { cacheFileContent, listCachedFiles, getCachedFileContent } from "../utils/fileContentCache";
 
@@ -4219,6 +4220,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const [isCopied, setIsCopied] = useState(false);
   const [showExcelModal, setShowExcelModal] = useState(false);
   const [showRAGModal, setShowRAGModal] = useState(false);
+  const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [exampleDataList, setExampleDataList] = useState<
     Array<{ name: string; content: string }>
   >([]);
@@ -5576,6 +5578,16 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               placeholder="Module Name"
               disabled={!module}
             />
+            {module && (
+              <button
+                onClick={() => setShowDescriptionModal(true)}
+                className="px-2 py-1 text-xs border border-blue-500 text-blue-600 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md transition-colors flex-shrink-0 flex items-center gap-1"
+                title="이 모듈의 입력·역할·결과 설명 보기"
+              >
+                <InformationCircleIcon className="w-4 h-4" />
+                설명
+              </button>
+            )}
             {module &&
               onRunModule &&
               (() => {
@@ -5892,6 +5904,14 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         <DataAnalysisRAGModal
           module={module}
           onClose={() => setShowRAGModal(false)}
+        />
+      )}
+
+      {/* Module Description Modal — 모듈 입력·역할·결과 정적 설명 */}
+      {showDescriptionModal && module && (
+        <ModuleDescriptionModal
+          moduleType={module.type}
+          onClose={() => setShowDescriptionModal(false)}
         />
       )}
     </div>
