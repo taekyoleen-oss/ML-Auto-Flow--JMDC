@@ -2779,16 +2779,8 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // 초기 마운트 시에만 실행
 
-  // 모듈 배열에 따라 자동으로 Fit to View 실행
-  useEffect(() => {
-    if (modules.length > 0) {
-      // 약간의 지연을 두어 DOM이 완전히 렌더링된 후 실행
-      const timer = setTimeout(() => {
-        handleFitToView();
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [modules, handleFitToView]);
+  // Fit to View는 사용자가 명시적으로 트리거할 때만 실행 (모듈 이동/추가 시 자동 재중앙 정렬 제거)
+  // 로드/AI 파이프라인 생성 등 필요한 곳에서는 명시적으로 handleFitToView()를 호출함
 
   // Close sample menu and my work menu when clicking outside
   useEffect(() => {
@@ -3032,15 +3024,38 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
         return;
       }
 
-      // 다른 모듈들은 기존대로 중앙에 생성
+      // 다른 모듈들은 화면 중앙 근처에 생성하되, 기존 모듈과 겹치지 않도록 오프셋 적용
       if (canvasContainerRef.current) {
         const canvasRect = canvasContainerRef.current.getBoundingClientRect();
-        // Position in the middle, accounting for current pan and scale
-        const position = {
-          x: (canvasRect.width / 2 - 128 - pan.x) / scale, // 128 is half module width (256/2)
-          y: (canvasRect.height / 2 - 60 - pan.y) / scale, // 60 is half module height
-        };
-        createModule(type, position);
+        const moduleWidth = 256;
+        const moduleHeight = 120;
+
+        // 현재 화면(viewport) 중앙의 캔버스 좌표
+        const baseX = (canvasRect.width / 2 - moduleWidth / 2 - pan.x) / scale;
+        const baseY = (canvasRect.height / 2 - moduleHeight / 2 - pan.y) / scale;
+
+        // 같은 자리에 이미 모듈이 있으면 (20, 20)씩 어긋나게 배치
+        const STEP = 20;
+        const THRESHOLD = 10; // 이 거리 안에 있으면 "겹친다"고 판단
+        let candidate = { x: baseX, y: baseY };
+        let attempt = 0;
+        const maxAttempts = 50;
+        while (
+          attempt < maxAttempts &&
+          modules.some(
+            (m) =>
+              Math.abs(m.position.x - candidate.x) < THRESHOLD &&
+              Math.abs(m.position.y - candidate.y) < THRESHOLD
+          )
+        ) {
+          attempt += 1;
+          candidate = {
+            x: baseX + attempt * STEP,
+            y: baseY + attempt * STEP,
+          };
+        }
+
+        createModule(type, candidate);
       }
     },
     [
