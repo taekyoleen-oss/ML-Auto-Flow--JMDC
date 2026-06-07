@@ -36,8 +36,12 @@ pnpm run verify:pipelines      # 또는: node verify/run-verification.mjs
 
 ## 알려진 제한
 
-- **클러스터링 모듈(KMeans/TrainClusteringModel/ClusteringData/DBSCAN)** 은 아직 전체코드용
-  Python 템플릿(`codeSnippets.ts`)이 없어 외부 실행 코드가 생성되지 않는다. 향후 템플릿 추가 시
-  `pipelines/`에 클러스터링 픽스처를 넣어 검증 범위에 포함한다.
+- **클러스터링 K-Means 체인(KMeans→TrainClusteringModel→ClusteringData)** 은 전체코드용 Python
+  템플릿이 추가되어 외부 실행+재현 검증된다(`07_clustering_kmeans.json`). 지도학습 TrainModel/ScoreModel과
+  동일한 변수 와이어링(`model`→`trained_model`)을 따른다.
+- **PCA** 정의 템플릿도 추가됐고 `ClusteringData`가 `.transform` 분기로 주성분을 처리하지만,
+  `DEFAULT_MODULES`의 PCA가 `PrincipalComponentAnalysis`(ModuleType 미존재)로 잘못 정의돼 있어
+  fixture 검증은 보류한다(앱 차원 선결 과제).
+- **DBSCAN/계층적 클러스터링** 은 `data_analysis_modules.py`에 함수만 있고 캔버스 ModuleType이 없어 범위 외.
 - 통계모델 정의 모듈(OLSModel 등)은 자체 실행 변수를 만들지 않고 ResultModel이 전체 코드를 생성한다.
   생성기는 "모듈 코드가 실제로 출력 변수를 만들 때만" 출력 변수를 할당하도록 처리되어 있다.

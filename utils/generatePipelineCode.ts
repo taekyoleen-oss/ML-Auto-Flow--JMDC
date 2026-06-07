@@ -237,6 +237,8 @@ const MODULE_OUTPUT_VAR: Record<string, string> = {
   ResultModel: 'model_results',
   PredictModel: 'predicted_data',
   KNN: 'trained_model',
+  TrainClusteringModel: 'trained_model',
+  ClusteringData: 'clustered_data',
   OutlierDetector: 'dataframe',
   NormalityChecker: 'dataframe',
   HypothesisTesting: 'dataframe',

@@ -924,6 +924,95 @@ scored_data['Predict'] = predictions
 
 # scored_data now contains original data plus predictions
 `,
+  KMeans: `
+from sklearn.cluster import KMeans
+
+# This module creates a K-Means clustering model instance.
+# The model will be fitted in the 'Train Clustering Model' module.
+# Parameters from UI
+p_n_clusters = {n_clusters}
+p_init = {init}
+p_n_init = {n_init}
+p_max_iter = {max_iter}
+p_random_state = {random_state}
+if p_random_state is None:
+    p_random_state = 42  # 재현성 보장을 위한 기본 시드
+
+model = KMeans(
+    n_clusters=p_n_clusters,
+    init=p_init,
+    n_init=p_n_init,
+    max_iter=p_max_iter,
+    random_state=p_random_state,
+)
+
+print(f"K-Means model instance created (n_clusters={p_n_clusters}, init={p_init}).")
+# Note: The model is not fitted here. It will be fitted in 'Train Clustering Model'.
+# model variable contains the estimator instance ready for training.
+`,
+  PCA: `
+from sklearn.decomposition import PCA
+
+# This module creates a PCA (dimensionality reduction) model instance.
+# The model will be fitted in the 'Train Clustering Model' module.
+# Parameters from UI
+p_n_components = {n_components}
+
+model = PCA(n_components=p_n_components, random_state=42)
+
+print(f"PCA model instance created (n_components={p_n_components}).")
+# Note: The model is not fitted here. It will be fitted in 'Train Clustering Model'.
+# model variable contains the estimator instance ready for training.
+`,
+  TrainClusteringModel: `
+import pandas as pd
+
+# This module fits an unsupervised model (K-Means / PCA) with the provided data.
+# The model instance comes from a 'K-Means' or 'PCA' module ('model').
+# Parameters from UI
+p_feature_columns = {feature_columns}
+
+# Empty selection → use all numeric columns
+if not p_feature_columns:
+    feature_cols = dataframe.select_dtypes(include=['number']).columns.tolist()
+else:
+    feature_cols = list(p_feature_columns)
+
+X = dataframe[feature_cols]
+
+# Fit the unsupervised model (KMeans/PCA both fit on features only — no label).
+trained_model = model.fit(X)
+
+print(f"Clustering model trained on {len(feature_cols)} feature(s): {feature_cols}")
+# trained_model is now ready for use in the 'Clustering Data' module.
+`,
+  ClusteringData: `
+import pandas as pd
+import numpy as np
+
+# This module applies a fitted model to produce cluster assignments / components.
+# Input: 'trained_model' (from Train Clustering Model), 'dataframe' (data to transform)
+
+# Prefer the feature names the model was fitted on (sklearn stores them).
+if hasattr(trained_model, 'feature_names_in_'):
+    feature_cols = list(trained_model.feature_names_in_)
+else:
+    feature_cols = dataframe.select_dtypes(include=['number']).columns.tolist()
+
+X = dataframe[feature_cols]
+clustered_data = dataframe.copy()
+
+# Clustering models (KMeans) expose .predict → assign cluster labels.
+# Dimensionality reduction (PCA) exposes .transform → append principal components.
+if hasattr(trained_model, 'predict'):
+    clustered_data['Cluster'] = trained_model.predict(X)
+else:
+    components = np.asarray(trained_model.transform(X))
+    for i in range(components.shape[1]):
+        clustered_data[f'PC{i + 1}'] = components[:, i]
+
+# clustered_data now contains original data plus cluster assignments / components.
+`,
   EvaluateModel: `
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, mean_squared_error, mean_absolute_error, r2_score
 import pandas as pd
