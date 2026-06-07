@@ -964,6 +964,22 @@ print(f"PCA model instance created (n_components={p_n_components}).")
 # Note: The model is not fitted here. It will be fitted in 'Train Clustering Model'.
 # model variable contains the estimator instance ready for training.
 `,
+  DBSCAN: `
+from sklearn.cluster import DBSCAN
+
+# This module creates a DBSCAN (density-based) clustering model instance.
+# The model will be fitted in the 'Train Clustering Model' module.
+# Parameters from UI
+p_eps = {eps}
+p_min_samples = {min_samples}
+
+model = DBSCAN(eps=p_eps, min_samples=p_min_samples)
+
+print(f"DBSCAN model instance created (eps={p_eps}, min_samples={p_min_samples}).")
+# Note: DBSCAN is transductive — it has no separate .predict; cluster labels
+# (incl. -1 for noise) are computed during .fit and exposed via .labels_.
+# model variable contains the estimator instance ready for training.
+`,
   TrainClusteringModel: `
 import pandas as pd
 
@@ -1004,12 +1020,17 @@ clustered_data = dataframe.copy()
 
 # Clustering models (KMeans) expose .predict → assign cluster labels.
 # Dimensionality reduction (PCA) exposes .transform → append principal components.
+# Transductive clusterers (DBSCAN) have neither → reuse .labels_ from .fit.
 if hasattr(trained_model, 'predict'):
     clustered_data['Cluster'] = trained_model.predict(X)
-else:
+elif hasattr(trained_model, 'transform'):
     components = np.asarray(trained_model.transform(X))
     for i in range(components.shape[1]):
         clustered_data[f'PC{i + 1}'] = components[:, i]
+else:
+    # DBSCAN/Agglomerative: labels_ aligns row-wise with the fitted data
+    # (the pipeline feeds the same dataset to fit and to this module). -1 = noise.
+    clustered_data['Cluster'] = np.asarray(trained_model.labels_)
 
 # clustered_data now contains original data plus cluster assignments / components.
 `,

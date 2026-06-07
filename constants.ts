@@ -250,6 +250,13 @@ export const TOOLBOX_MODULES = [
     icon: ChartPieIcon,
     description: "A technique for dimensionality reduction.",
   },
+  {
+    type: ModuleType.DBSCAN,
+    name: "DBSCAN Clustering",
+    icon: UsersIcon,
+    description:
+      "A density-based clustering algorithm that finds clusters of arbitrary shape and marks outliers as noise.",
+  },
 
   // Clustering Operations
   {
@@ -810,6 +817,13 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
       type: ModuleType.PrincipalComponentAnalysis,
       status: ModuleStatus.Pending,
       parameters: { n_components: 2 },
+      inputs: [],
+      outputs: [{ name: "model_out", type: "model" }],
+    },
+    {
+      type: ModuleType.DBSCAN,
+      status: ModuleStatus.Pending,
+      parameters: { eps: 0.5, min_samples: 5 },
       inputs: [],
       outputs: [{ name: "model_out", type: "model" }],
     },

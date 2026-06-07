@@ -42,6 +42,10 @@ pnpm run verify:pipelines      # 또는: node verify/run-verification.mjs
 - **PCA 체인(PCA→TrainClusteringModel→ClusteringData)** 도 외부 실행+재현 검증된다(`08_pca.json`).
   `ClusteringData`가 `.transform` 분기로 주성분(PC1, PC2…)을 생성한다. ModuleType의 PCA /
   PrincipalComponentAnalysis 불일치는 동일 값("PCA") 별칭 멤버로 정합화했다(types.ts).
-- **DBSCAN/계층적 클러스터링** 은 `data_analysis_modules.py`에 함수만 있고 캔버스 ModuleType이 없어 범위 외.
+- **DBSCAN 체인(DBSCAN→TrainClusteringModel→ClusteringData)** 도 외부 실행+재현 검증된다(`09_dbscan.json`).
+  DBSCAN은 transductive(`.predict` 없음)라 `ClusteringData`가 `.labels_` 분기로 클러스터(-1=노이즈)를 할당한다.
+  ModuleType.DBSCAN 신설 + 팔레트/DEFAULT_MODULES/PropertiesPanel(eps·min_samples)/ComponentRenderer 등록 완료.
+- **계층적 클러스터링(Agglomerative)** 은 `data_analysis_modules.py`에 함수만 있고 캔버스 ModuleType이 없어 범위 외
+  (추가 시 DBSCAN과 동일하게 `.labels_` 분기로 처리되며 픽스처만 추가하면 된다).
 - 통계모델 정의 모듈(OLSModel 등)은 자체 실행 변수를 만들지 않고 ResultModel이 전체 코드를 생성한다.
   생성기는 "모듈 코드가 실제로 출력 변수를 만들 때만" 출력 변수를 할당하도록 처리되어 있다.

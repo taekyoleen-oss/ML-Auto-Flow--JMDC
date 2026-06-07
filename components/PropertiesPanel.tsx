@@ -3181,6 +3181,24 @@ const renderParameters = (
           />
         </>
       );
+    // DBSCAN: 모델 정의만 (밀도 기반 하이퍼파라미터)
+    case ModuleType.DBSCAN:
+      return (
+        <>
+          <PropertyInput
+            label="Eps (이웃 반경)"
+            value={module.parameters.eps ?? 0.5}
+            type="number"
+            onChange={(v) => onParamChange("eps", v)}
+          />
+          <PropertyInput
+            label="Min Samples (핵심점 최소 이웃 수)"
+            value={module.parameters.min_samples ?? 5}
+            type="number"
+            onChange={(v) => onParamChange("min_samples", v)}
+          />
+        </>
+      );
     // TrainClusteringModel: feature_columns 선택
     case ModuleType.TrainClusteringModel: {
       const sourceData = getConnectedDataSource(module.id);
