@@ -301,6 +301,10 @@ export interface TrainedClusteringModelOutput {
   components?: number[][];
   explainedVarianceRatio?: number[];
   mean?: number[];
+  // For transductive clusterers (DBSCAN / Hierarchical): labels computed at fit time.
+  labels?: number[];
+  nClusters?: number;
+  nNoise?: number;
 }
 
 export interface ClusteringDataOutput {

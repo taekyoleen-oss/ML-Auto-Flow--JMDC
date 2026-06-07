@@ -9360,6 +9360,93 @@ js_result = json.dumps(results)
 }
 
 /**
+ * DBSCAN / Agglomerative(계층적) 등 transductive 클러스터링을 학습합니다.
+ * 이들은 별도 .predict가 없어 .fit_predict로 라벨을 한 번에 계산하고 labels_를 반환합니다.
+ * (ClusteringData는 학습에 쓰인 동일 데이터에 이 라벨을 그대로 부여한다.)
+ */
+export async function fitTransductiveClusteringPython(
+  X: number[][],
+  algorithm: "dbscan" | "agglomerative",
+  params: Record<string, any>,
+  featureColumns: string[],
+  timeoutMs: number = 60000
+): Promise<{
+  labels: number[];
+  nClusters: number;
+  nNoise: number;
+  model: any;
+}> {
+  try {
+    const py = await loadPyodide();
+    const dataJson = JSON.stringify(X);
+    const paramsJson = JSON.stringify(params || {});
+
+    const code = `
+import json
+import numpy as np
+
+# 데이터 준비
+js_data = json.loads('${dataJson.replace(/'/g, "\\'")}')
+js_params = json.loads('${paramsJson.replace(/'/g, "\\'")}')
+algorithm = '${algorithm}'
+
+X = np.array(js_data)
+
+if algorithm == 'dbscan':
+    from sklearn.cluster import DBSCAN
+    model = DBSCAN(
+        eps=float(js_params.get('eps', 0.5)),
+        min_samples=int(js_params.get('min_samples', 5)),
+    )
+else:
+    from sklearn.cluster import AgglomerativeClustering
+    linkage = js_params.get('linkage', 'ward')
+    metric = js_params.get('metric', 'euclidean')
+    # 'ward' linkage only supports the euclidean metric.
+    if linkage == 'ward':
+        metric = 'euclidean'
+    try:
+        # sklearn >= 1.2 uses 'metric'
+        model = AgglomerativeClustering(n_clusters=int(js_params.get('n_clusters', 3)), linkage=linkage, metric=metric)
+    except TypeError:
+        # older sklearn uses 'affinity'
+        model = AgglomerativeClustering(n_clusters=int(js_params.get('n_clusters', 3)), linkage=linkage, affinity=metric)
+
+labels = [int(v) for v in model.fit_predict(X).tolist()]
+unique_labels = set(labels)
+n_clusters = len([c for c in unique_labels if c != -1])
+n_noise = labels.count(-1)
+
+results = {
+    'labels': labels,
+    'n_clusters': n_clusters,
+    'n_noise': n_noise,
+    'model': {'algorithm': algorithm, 'labels_': labels},
+}
+
+js_result = json.dumps(results)
+`;
+
+    const resultJson = await withTimeout(
+      py.runPython(code + "\njs_result"),
+      timeoutMs,
+      `클러스터링 학습 타임아웃 (${timeoutMs / 1000}초 초과)`
+    );
+
+    const result = JSON.parse(resultJson);
+    return {
+      labels: result.labels,
+      nClusters: result.n_clusters,
+      nNoise: result.n_noise,
+      model: result.model,
+    };
+  } catch (error: any) {
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python 클러스터링(transductive) 학습 오류: ${errorMessage}`);
+  }
+}
+
+/**
  * Lee-Carter 모델을 Python으로 실행합니다
  * 타임아웃: 120초
  */

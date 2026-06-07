@@ -9705,6 +9705,37 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
             "INFO",
             `PCA 모델 정의 모듈 '${module.name}'이 생성되었습니다.`
           );
+        } else if (module.type === ModuleType.DBSCAN) {
+          // DBSCAN 모델 정의만 생성
+          newOutputData = {
+            type: "ModelDefinitionOutput",
+            modelFamily: "sklearn",
+            modelType: "DBSCAN" as any,
+            parameters: {
+              eps: module.parameters.eps ?? 0.5,
+              min_samples: module.parameters.min_samples ?? 5,
+            },
+          } as ModelDefinitionOutput;
+          addLog(
+            "INFO",
+            `DBSCAN 모델 정의 모듈 '${module.name}'이 생성되었습니다.`
+          );
+        } else if (module.type === ModuleType.HierarchicalClustering) {
+          // 계층적(Agglomerative) 모델 정의만 생성
+          newOutputData = {
+            type: "ModelDefinitionOutput",
+            modelFamily: "sklearn",
+            modelType: "HierarchicalClustering" as any,
+            parameters: {
+              n_clusters: module.parameters.n_clusters ?? 3,
+              linkage: module.parameters.linkage || "ward",
+              metric: module.parameters.metric || "euclidean",
+            },
+          } as ModelDefinitionOutput;
+          addLog(
+            "INFO",
+            `계층적 클러스터링 모델 정의 모듈 '${module.name}'이 생성되었습니다.`
+          );
         } else if (module.type === ModuleType.TrainClusteringModel) {
           // TrainClusteringModel: 모델 + 데이터로 학습
           const modelInputConnection = connections.find(
@@ -9774,10 +9805,12 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
           // 모델 타입 확인
           if (
             modelSourceModule.type !== ModuleType.KMeans &&
-            modelSourceModule.type !== ModuleType.PrincipalComponentAnalysis
+            modelSourceModule.type !== ModuleType.PrincipalComponentAnalysis &&
+            modelSourceModule.type !== ModuleType.DBSCAN &&
+            modelSourceModule.type !== ModuleType.HierarchicalClustering
           ) {
             throw new Error(
-              "TrainClusteringModel only supports K-Means and PCA models."
+              "TrainClusteringModel supports K-Means, PCA, DBSCAN, and Hierarchical models."
             );
           }
 
@@ -9927,6 +9960,38 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
                 components: fitResult.components,
                 explainedVarianceRatio: fitResult.explainedVarianceRatio,
                 mean: fitResult.mean,
+              } as TrainedClusteringModelOutput;
+            } else if (
+              modelSourceModule.type === ModuleType.DBSCAN ||
+              modelSourceModule.type === ModuleType.HierarchicalClustering
+            ) {
+              // Transductive(.predict 없음): fit_predict로 라벨을 계산해 저장한다.
+              const { fitTransductiveClusteringPython } = pyodideModule;
+              const modelParams =
+                modelSourceModule.outputData?.type === "ModelDefinitionOutput"
+                  ? modelSourceModule.outputData.parameters
+                  : modelSourceModule.parameters;
+              const algorithm =
+                modelSourceModule.type === ModuleType.DBSCAN
+                  ? "dbscan"
+                  : "agglomerative";
+
+              const fitResult = await fitTransductiveClusteringPython(
+                X,
+                algorithm,
+                modelParams,
+                ordered_feature_columns,
+                60000
+              );
+
+              newOutputData = {
+                type: "TrainedClusteringModelOutput",
+                modelType: modelSourceModule.type,
+                featureColumns: ordered_feature_columns,
+                model: fitResult.model,
+                labels: fitResult.labels,
+                nClusters: fitResult.nClusters,
+                nNoise: fitResult.nNoise,
               } as TrainedClusteringModelOutput;
             }
 
@@ -10158,6 +10223,39 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
                 type: "ClusteringDataOutput",
                 clusteredData: transformedData,
                 modelType: ModuleType.PrincipalComponentAnalysis,
+              } as ClusteringDataOutput;
+            } else if (
+              trainedModel.modelType === ModuleType.DBSCAN ||
+              trainedModel.modelType === ModuleType.HierarchicalClustering
+            ) {
+              // Transductive: 학습 시 계산한 라벨을 동일 데이터에 그대로 부여한다.
+              // (이들은 새 데이터를 예측할 수 없으므로 행 수가 일치해야 한다.)
+              const labels = trainedModel.labels || [];
+              if (labels.length !== rows.length) {
+                throw new Error(
+                  `Transductive 클러스터링(DBSCAN/Hierarchical)은 새 데이터에 예측할 수 없습니다. 학습 ${labels.length}행 ≠ 입력 ${rows.length}행. 학습에 사용한 동일 데이터를 연결하세요.`
+                );
+              }
+              const newRows = rows.map((row, idx) => ({
+                ...row,
+                cluster: labels[idx],
+              }));
+              const newColumns = [
+                ...inputData.columns,
+                { name: "cluster", type: "number" },
+              ];
+
+              const clusteredData: DataPreview = {
+                type: "DataPreview",
+                columns: newColumns,
+                totalRowCount: inputData.totalRowCount,
+                rows: newRows,
+              };
+
+              newOutputData = {
+                type: "ClusteringDataOutput",
+                clusteredData,
+                modelType: trainedModel.modelType,
               } as ClusteringDataOutput;
             }
 
