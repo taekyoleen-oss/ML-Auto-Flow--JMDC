@@ -12,7 +12,8 @@
     "server": "node server/split-data-server.js",
     "migrate:samples": "node scripts/migrate-samples-to-db.js",
     "seed:supabase": "node scripts/seed-ml-supabase-samples.js",
-    "check:supabase": "node scripts/check-ml-supabase-samples.js"
+    "check:supabase": "node scripts/check-ml-supabase-samples.js",
+    "verify:pipelines": "node verify/run-verification.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.21.0",

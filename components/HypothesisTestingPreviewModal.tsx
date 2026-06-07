@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { CanvasModule, HypothesisTestingOutput } from '../types';
 import { XCircleIcon } from './icons';
+import { ApiKeyMissingError } from '../lib/aiClient';
+import { explainModuleResult } from '../lib/aiHelpers';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface HypothesisTestingPreviewModalProps {
     module: CanvasModule;
@@ -17,6 +20,11 @@ export const HypothesisTestingPreviewModal: React.FC<HypothesisTestingPreviewMod
     if (!output || output.type !== 'HypothesisTestingOutput') return null;
 
     const { results } = output;
+
+    // ✨ AI 해설 (explainModuleResult 기반)
+    const [explanation, setExplanation] = useState('');
+    const [isExplaining, setIsExplaining] = useState(false);
+    const [aiError, setAiError] = useState('');
 
     const getTestTypeLabel = (testType: string): string => {
         const labels: Record<string, string> = {
@@ -53,6 +61,38 @@ export const HypothesisTestingPreviewModal: React.FC<HypothesisTestingPreviewMod
         return 'text-gray-400';
     };
 
+    // ✨ AI 해설: 각 가설검정의 통계량/p값/결론을 요약해 explainModuleResult에 전달
+    const handleExplain = async () => {
+        setIsExplaining(true);
+        setAiError('');
+        setExplanation('');
+        try {
+            const lines = results.map((r, i) => {
+                const name = r.testName || getTestTypeLabel(r.testType);
+                const parts = [
+                    `${i + 1}. ${name} [${(r.columns || []).join(', ')}]`,
+                    r.statistic !== undefined ? `통계량=${formatValue(r.statistic)}` : null,
+                    r.pValue !== undefined ? `p값=${formatValue(r.pValue)}` : null,
+                    r.degreesOfFreedom !== undefined ? `자유도=${formatValue(r.degreesOfFreedom)}` : null,
+                    r.conclusion ? `결론=${r.conclusion}` : null,
+                ].filter(Boolean).join(', ');
+                return parts;
+            }).join('\n');
+
+            const summary = `프로젝트: ${projectName}\n검정 ${results.length}건\n\n${lines || '(검정 결과 없음)'}`;
+            const result = await explainModuleResult('Hypothesis Testing(가설검정)', summary);
+            setExplanation(result);
+        } catch (err) {
+            if (err instanceof ApiKeyMissingError) {
+                setAiError('Gemini API 키가 필요합니다. 설정(⚙)에서 키를 입력한 뒤 다시 시도하세요.');
+            } else {
+                setAiError(`AI 해설 생성 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`);
+            }
+        } finally {
+            setIsExplaining(false);
+        }
+    };
+
     return (
         <div 
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
@@ -64,12 +104,39 @@ export const HypothesisTestingPreviewModal: React.FC<HypothesisTestingPreviewMod
             >
                 <header className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
                     <h2 className="text-xl font-bold text-gray-800">Hypothesis Testing: {module.name}</h2>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
-                        <XCircleIcon className="w-6 h-6" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {results.length > 0 && (
+                            <button
+                                onClick={handleExplain}
+                                disabled={isExplaining}
+                                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                                title="AI가 이 가설검정 결과를 해설합니다"
+                            >
+                                <span aria-hidden>✨</span>
+                                <span>{isExplaining ? 'AI 분석 중…' : 'AI 해설'}</span>
+                            </button>
+                        )}
+                        <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
+                            <XCircleIcon className="w-6 h-6" />
+                        </button>
+                    </div>
                 </header>
                 
                 <main className="flex-grow p-6 overflow-auto space-y-6">
+                    {/* ✨ AI 해설 패널 (explainModuleResult) */}
+                    {(isExplaining || explanation || aiError) && (
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                            <h3 className="text-lg font-bold text-blue-800 mb-2 flex items-center gap-2">
+                                <span aria-hidden>✨</span> AI 해설
+                            </h3>
+                            {isExplaining && (
+                                <p className="text-sm text-gray-500 animate-pulse">AI가 가설검정 결과를 해설하고 있습니다…</p>
+                            )}
+                            {aiError && <p className="text-sm text-red-600">{aiError}</p>}
+                            {explanation && <MarkdownRenderer text={explanation} />}
+                        </div>
+                    )}
+
                     {results.length === 0 ? (
                         <div className="text-center text-gray-500 p-8">
                             <p>No test results available.</p>

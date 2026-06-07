@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { CanvasModule, CorrelationOutput } from '../types';
 import { XCircleIcon } from './icons';
+import { ApiKeyMissingError } from '../lib/aiClient';
+import { explainModuleResult } from '../lib/aiHelpers';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface CorrelationPreviewModalProps {
     module: CanvasModule;
@@ -23,7 +26,12 @@ export const CorrelationPreviewModal: React.FC<CorrelationPreviewModalProps> = (
     const defaultTab = availableMethods.length > 0 ? availableMethods[0] : "pearson";
     
     const [activeTab, setActiveTab] = useState<string>(defaultTab);
-    
+
+    // ✨ AI 해설 (explainModuleResult 기반)
+    const [explanation, setExplanation] = useState('');
+    const [isExplaining, setIsExplaining] = useState(false);
+    const [aiError, setAiError] = useState('');
+
     // activeTab이 설정되지 않았거나 사용 불가능한 경우 기본값으로 설정
     useEffect(() => {
         // heatmap이나 pairplot이 활성화되어 있으면 유지
@@ -62,6 +70,42 @@ export const CorrelationPreviewModal: React.FC<CorrelationPreviewModalProps> = (
         return 'text-gray-600';
     };
 
+    // ✨ AI 해설: 상관행렬 중 강한 상관쌍을 요약해 explainModuleResult에 전달
+    const handleExplain = async () => {
+        setIsExplaining(true);
+        setAiError('');
+        setExplanation('');
+        try {
+            const matrixLines = (correlationMatrices || []).map(cm => {
+                const cols = cm.columns;
+                const pairs: string[] = [];
+                for (let i = 0; i < cols.length; i++) {
+                    for (let j = i + 1; j < cols.length; j++) {
+                        const v = cm.matrix[cols[i]]?.[cols[j]];
+                        if (typeof v === 'number' && Math.abs(v) > 0.5) {
+                            pairs.push(`  - ${cols[i]} ↔ ${cols[j]}: ${v.toFixed(3)}`);
+                        }
+                    }
+                }
+                return `[${getMethodLabel(cm.method)}] 강한 상관쌍 (|r|>0.5):\n${pairs.length ? pairs.join('\n') : '  - (없음)'}`;
+            }).join('\n\n');
+
+            const summary = `프로젝트: ${projectName}\n수치형 ${numericColumns.length}개 / 범주형 ${categoricalColumns.length}개 / 전체 ${columns.length}개 컬럼\n분석 방법: ${availableMethods.map(getMethodLabel).join(', ') || '없음'}\n\n${matrixLines || '(상관행렬 없음)'}`;
+            const result = await explainModuleResult('Correlation(상관분석)', summary);
+            setExplanation(result);
+        } catch (err) {
+            if (err instanceof ApiKeyMissingError) {
+                setAiError('Gemini API 키가 필요합니다. 설정(⚙)에서 키를 입력한 뒤 다시 시도하세요.');
+            } else {
+                setAiError(`AI 해설 생성 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`);
+            }
+        } finally {
+            setIsExplaining(false);
+        }
+    };
+
+    const canExplain = (correlationMatrices?.length || 0) > 0;
+
     return (
         <div 
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
@@ -73,9 +117,22 @@ export const CorrelationPreviewModal: React.FC<CorrelationPreviewModalProps> = (
             >
                 <header className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
                     <h2 className="text-xl font-bold text-gray-800">Correlation Analysis: {module.name}</h2>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
-                        <XCircleIcon className="w-6 h-6" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {canExplain && (
+                            <button
+                                onClick={handleExplain}
+                                disabled={isExplaining}
+                                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                                title="AI가 이 상관분석 결과를 해설합니다"
+                            >
+                                <span aria-hidden>✨</span>
+                                <span>{isExplaining ? 'AI 분석 중…' : 'AI 해설'}</span>
+                            </button>
+                        )}
+                        <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
+                            <XCircleIcon className="w-6 h-6" />
+                        </button>
+                    </div>
                 </header>
                 
                 {/* 탭 네비게이션 */}
@@ -125,6 +182,20 @@ export const CorrelationPreviewModal: React.FC<CorrelationPreviewModalProps> = (
                 </div>
 
                 <main className="flex-grow p-6 overflow-auto space-y-6">
+                    {/* ✨ AI 해설 패널 (explainModuleResult) */}
+                    {(isExplaining || explanation || aiError) && (
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                            <h3 className="text-lg font-bold text-blue-800 mb-2 flex items-center gap-2">
+                                <span aria-hidden>✨</span> AI 해설
+                            </h3>
+                            {isExplaining && (
+                                <p className="text-sm text-gray-500 animate-pulse">AI가 상관분석 결과를 해설하고 있습니다…</p>
+                            )}
+                            {aiError && <p className="text-sm text-red-600">{aiError}</p>}
+                            {explanation && <MarkdownRenderer text={explanation} />}
+                        </div>
+                    )}
+
                     {/* 요약 정보 */}
                     <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
                         <h3 className="text-lg font-bold text-blue-900 mb-2">Summary</h3>

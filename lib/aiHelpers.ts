@@ -15,11 +15,32 @@ export async function runPrompt(prompt: string, model: string = DEFAULT_AI_MODEL
 }
 
 /**
+ * 프롬프트 1건을 스트리밍으로 보내고, 도착하는 텍스트 청크를 순차적으로 yield한다(공통 스트리밍 래퍼).
+ * 키 없으면 runPrompt와 동일하게 ApiKeyMissingError를 던지며 설정 모달이 자동으로 열린다.
+ */
+export async function* streamPrompt(
+  prompt: string,
+  model: string = DEFAULT_AI_MODEL
+): AsyncGenerator<string> {
+  const ai = getGeminiClient(); // 키 없으면 ApiKeyMissingError + 설정 모달 자동 오픈
+  const stream = await ai.models.generateContentStream({ model, contents: prompt });
+  for await (const chunk of stream) {
+    const text = chunk.text;
+    if (text) yield text;
+  }
+}
+
+/**
  * 내보낸 Python 파이프라인 코드를 한국어로 해설한다.
  * 이 앱의 핵심 가치(모듈의 Python 재현성)를 사용자가 코드 수준에서 이해하도록 돕는다.
  */
 export async function explainPythonCode(code: string): Promise<string> {
-  const prompt = `당신은 친절한 데이터 사이언스 교육자입니다. 아래는 노코드 ML 파이프라인 도구가 생성한 **재현 가능한 Python 코드**입니다.
+  return runPrompt(buildExplainPythonCodePrompt(code));
+}
+
+/** explainPythonCode와 동일한 프롬프트를 만들어 반환한다(스트리밍 래퍼와 공유). */
+function buildExplainPythonCodePrompt(code: string): string {
+  return `당신은 친절한 데이터 사이언스 교육자입니다. 아래는 노코드 ML 파이프라인 도구가 생성한 **재현 가능한 Python 코드**입니다.
 이 코드를 처음 보는 분석가도 이해할 수 있도록 한국어로 설명해 주세요.
 
 다음 형식의 마크다운으로 답하세요(불필요한 서론 없이):
@@ -32,7 +53,11 @@ export async function explainPythonCode(code: string): Promise<string> {
 \`\`\`python
 ${code}
 \`\`\``;
-  return runPrompt(prompt);
+}
+
+/** explainPythonCode의 스트리밍 버전. 동일 프롬프트를 청크 단위로 흘려보낸다. */
+export async function* streamExplainPythonCode(code: string): AsyncGenerator<string> {
+  yield* streamPrompt(buildExplainPythonCodePrompt(code));
 }
 
 /** 모듈 실행 결과(요약/표)를 한국어로 해설한다. */
@@ -47,11 +72,23 @@ ${resultSummary}`;
 
 /** 모듈/코드 실행 오류에 대한 원인 추정과 수정안을 제시한다. */
 export async function suggestErrorFix(errorMessage: string, context?: string): Promise<string> {
-  const prompt = `당신은 Python/데이터분석 디버깅 전문가입니다. 아래 오류의 가장 가능성 높은 원인과 구체적 해결 단계를 한국어 마크다운으로 제시하세요.
+  return runPrompt(buildSuggestErrorFixPrompt(errorMessage, context));
+}
+
+/** suggestErrorFix와 동일한 프롬프트를 만들어 반환한다(스트리밍 래퍼와 공유). */
+function buildSuggestErrorFixPrompt(errorMessage: string, context?: string): string {
+  return `당신은 Python/데이터분석 디버깅 전문가입니다. 아래 오류의 가장 가능성 높은 원인과 구체적 해결 단계를 한국어 마크다운으로 제시하세요.
 **추정 원인:** / **해결 방법:** (번호 매긴 단계) / **예방 팁:** 형식으로 답하세요.
 
 오류 메시지:
 ${errorMessage}
 ${context ? `\n관련 맥락:\n${context}` : ""}`;
-  return runPrompt(prompt);
+}
+
+/** suggestErrorFix의 스트리밍 버전. 동일 프롬프트를 청크 단위로 흘려보낸다. */
+export async function* streamSuggestErrorFix(
+  errorMessage: string,
+  context?: string
+): AsyncGenerator<string> {
+  yield* streamPrompt(buildSuggestErrorFixPrompt(errorMessage, context));
 }

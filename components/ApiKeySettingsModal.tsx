@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getStoredApiKey, setApiKey, clearApiKey, getApiKey } from '../lib/aiClient';
+import { getStoredApiKey, setApiKey, clearApiKey, getApiKey, testApiKey } from '../lib/aiClient';
 
 interface ApiKeySettingsModalProps {
   onClose: () => void;
@@ -12,10 +12,18 @@ function maskKey(key: string): string {
   return `${key.slice(0, 4)}${'•'.repeat(Math.max(4, key.length - 8))}${key.slice(-4)}`;
 }
 
+/** Gemini 키 형식의 간단 검증. 보통 'AIza'로 시작하고 길이 ~39. (차단이 아니라 안내용) */
+function looksLikeValidKey(key: string): boolean {
+  const k = key.trim();
+  return k.startsWith('AIza') && k.length >= 35 && k.length <= 45;
+}
+
 export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({ onClose }) => {
   const [input, setInput] = useState('');
   const [reveal, setReveal] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const storedKey = getStoredApiKey();
   // 사용자 키가 없어도 dev env 폴백 키가 잡히는지 표시
@@ -41,7 +49,30 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({ onClos
     clearApiKey();
     setInput('');
     setSaved(false);
+    setTestResult(null);
   };
+
+  const handleTest = async () => {
+    // 현재 입력값 우선, 없으면 저장된 키로 테스트.
+    const keyToTest = input.trim() || storedKey || getApiKey();
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const result = await testApiKey(keyToTest);
+      setTestResult(result);
+    } catch (err) {
+      setTestResult({
+        ok: false,
+        message: `연결 테스트 중 오류: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const trimmedInput = input.trim();
+  const showFormatWarning = trimmedInput.length > 0 && !looksLikeValidKey(trimmedInput);
+  const canTest = !!(trimmedInput || storedKey || getApiKey());
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
@@ -102,14 +133,29 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({ onClos
             </div>
           </div>
 
+          {/* 형식 경고 (차단하지 않고 안내만) */}
+          {showFormatWarning && (
+            <p className="text-[11px] text-amber-600 dark:text-amber-400">
+              ⚠ 일반적인 Gemini 키 형식과 다릅니다(보통 <span className="font-mono">AIza</span>로 시작, 약 39자). 그래도 저장은 가능합니다.
+            </p>
+          )}
+
           {/* 액션 */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={handleSave}
               disabled={!input.trim()}
               className="px-4 py-2 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {saved ? '저장됨 ✓' : '저장'}
+            </button>
+            <button
+              onClick={handleTest}
+              disabled={testing || !canTest}
+              className="px-4 py-2 text-xs font-semibold rounded-lg border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title="입력값(없으면 저장된 키)으로 Gemini 연결을 1회 시도합니다"
+            >
+              {testing ? '테스트 중…' : '연결 테스트'}
             </button>
             {storedKey && (
               <button
@@ -120,6 +166,20 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({ onClos
               </button>
             )}
           </div>
+
+          {/* 연결 테스트 결과 */}
+          {testResult && (
+            <div
+              className={`rounded-lg border px-3 py-2.5 text-xs ${
+                testResult.ok
+                  ? 'border-green-200 dark:border-green-800/50 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                  : 'border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+              }`}
+            >
+              {testResult.ok ? '✓ ' : '✕ '}
+              {testResult.message}
+            </div>
+          )}
 
           {/* 안내 */}
           <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/40 px-3 py-2.5">

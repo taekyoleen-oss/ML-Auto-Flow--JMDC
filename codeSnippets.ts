@@ -383,7 +383,9 @@ def handle_missing_values(df: pd.DataFrame, method: str = 'remove_row',
 # Parameters from UI
 p_method = {method}
 p_strategy = {strategy}
-p_columns = {columns}
+# 컬럼 선택(columnSelections)에서 대상 컬럼을 도출. 선택이 없으면 None(전체 적용).
+p_column_selections = {columnSelections}
+p_columns = [c for c, s in p_column_selections.items() if isinstance(s, dict) and s.get('selected', False)] or None
 p_n_neighbors = {n_neighbors}
 
 # Execution
@@ -620,8 +622,12 @@ import numpy as np
 # Parameters from UI
 p_feature_columns = {feature_columns}
 
+# 미지정 시 전체 수치형 컬럼을 대상으로 함
+if not p_feature_columns:
+    p_feature_columns = dataframe.select_dtypes(include=[np.number]).columns.tolist()
+
 # Feature columns 확인
-if not p_feature_columns or len(p_feature_columns) < 2:
+if len(p_feature_columns) < 2:
     raise ValueError("At least 2 feature columns are required for VIF calculation")
 
 # 선택된 feature columns가 DataFrame에 있는지 확인

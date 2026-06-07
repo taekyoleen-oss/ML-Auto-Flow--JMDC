@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { CanvasModule, NormalityCheckerOutput } from '../types';
 import { XCircleIcon } from './icons';
+import { ApiKeyMissingError } from '../lib/aiClient';
+import { explainModuleResult } from '../lib/aiHelpers';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface NormalityCheckerPreviewModalProps {
     module: CanvasModule;
@@ -17,6 +20,11 @@ export const NormalityCheckerPreviewModal: React.FC<NormalityCheckerPreviewModal
     if (!output || output.type !== 'NormalityCheckerOutput') return null;
 
     const [activeTab, setActiveTab] = useState<'summary' | 'qqplot' | 'ecdf' | 'boxplot'>('summary');
+
+    // ✨ AI 해설 (explainModuleResult 기반)
+    const [explanation, setExplanation] = useState('');
+    const [isExplaining, setIsExplaining] = useState(false);
+    const [aiError, setAiError] = useState('');
 
     const { column, skewness, kurtosis, jarqueBera, testResults, histogramImage, qqPlotImage, ecdfImage, boxplotImage } = output;
 
@@ -70,6 +78,36 @@ export const NormalityCheckerPreviewModal: React.FC<NormalityCheckerPreviewModal
         }
     };
 
+    // ✨ AI 해설: 왜도/첨도 및 각 정규성 검정 결과를 요약해 explainModuleResult에 전달
+    const handleExplain = async () => {
+        setIsExplaining(true);
+        setAiError('');
+        setExplanation('');
+        try {
+            const testLines = (testResults || []).map(t => {
+                const parts = [
+                    `- ${t.testName}`,
+                    t.statistic !== undefined ? `통계량=${formatValue(t.statistic)}` : null,
+                    t.pValue !== undefined ? `p값=${formatValue(t.pValue)}` : (t.criticalValue !== undefined ? `임계값=${formatValue(t.criticalValue)}` : null),
+                    t.conclusion ? `결론=${t.conclusion}` : null,
+                ].filter(Boolean).join(', ');
+                return parts;
+            }).join('\n');
+
+            const summary = `프로젝트: ${projectName}\n대상 컬럼: ${column}\n왜도(skewness)=${formatValue(skewness)}, 첨도(kurtosis)=${formatValue(kurtosis)}\nJarque-Bera: 통계량=${formatValue(jarqueBera.statistic)}, p값=${formatValue(jarqueBera.pValue)}, 결론=${jarqueBera.conclusion ?? 'N/A'}\n\n[정규성 검정]\n${testLines || '(추가 검정 없음)'}`;
+            const result = await explainModuleResult('Normality Checker(정규성 검정)', summary);
+            setExplanation(result);
+        } catch (err) {
+            if (err instanceof ApiKeyMissingError) {
+                setAiError('Gemini API 키가 필요합니다. 설정(⚙)에서 키를 입력한 뒤 다시 시도하세요.');
+            } else {
+                setAiError(`AI 해설 생성 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`);
+            }
+        } finally {
+            setIsExplaining(false);
+        }
+    };
+
     const tabs = [
         { id: 'summary' as const, label: 'Summary' },
         { id: 'qqplot' as const, label: 'Q-Q Plot' },
@@ -88,9 +126,20 @@ export const NormalityCheckerPreviewModal: React.FC<NormalityCheckerPreviewModal
             >
                 <header className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
                     <h2 className="text-xl font-bold text-gray-800">Normality Checker: {module.name}</h2>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
-                        <XCircleIcon className="w-6 h-6" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleExplain}
+                            disabled={isExplaining}
+                            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                            title="AI가 이 정규성 검정 결과를 해설합니다"
+                        >
+                            <span aria-hidden>✨</span>
+                            <span>{isExplaining ? 'AI 분석 중…' : 'AI 해설'}</span>
+                        </button>
+                        <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
+                            <XCircleIcon className="w-6 h-6" />
+                        </button>
+                    </div>
                 </header>
                 
                 <div className="flex-shrink-0 border-b border-gray-200">
@@ -112,6 +161,20 @@ export const NormalityCheckerPreviewModal: React.FC<NormalityCheckerPreviewModal
                 </div>
                 
                 <main className="flex-grow p-6 overflow-auto">
+                    {/* ✨ AI 해설 패널 (explainModuleResult) */}
+                    {(isExplaining || explanation || aiError) && (
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-6">
+                            <h3 className="text-lg font-bold text-blue-800 mb-2 flex items-center gap-2">
+                                <span aria-hidden>✨</span> AI 해설
+                            </h3>
+                            {isExplaining && (
+                                <p className="text-sm text-gray-500 animate-pulse">AI가 정규성 검정 결과를 해설하고 있습니다…</p>
+                            )}
+                            {aiError && <p className="text-sm text-red-600">{aiError}</p>}
+                            {explanation && <MarkdownRenderer text={explanation} />}
+                        </div>
+                    )}
+
                     {activeTab === 'summary' && (
                         <div className="space-y-6">
                             {/* Column name */}

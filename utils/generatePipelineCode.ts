@@ -186,6 +186,39 @@ function stripCommentsKeepCode(code: string): string {
 }
 
 /**
+ * 전체코드를 '실행 과정 위주'로 더 간결하게: 단순 스칼라 파라미터(p_xxx = 숫자/문자열/None/불리언)를
+ * 사용처에 인라인하고 그 대입문을 제거한다. 리스트/딕셔너리/표현식/재대입 변수는 건드리지 않는다.
+ * (예: p_method='MinMax'; ...normalize(df, p_method, ...) → normalize(df, 'MinMax', ...))
+ * 값 자체는 그대로 흐르므로 실행 결과는 변하지 않는다. 개별 모듈 코드(getModuleCode)에는 적용하지 않는다.
+ */
+function inlineScalarParams(code: string): string {
+  const lines = code.split('\n');
+  const scalarRe = /^(\s*)(p_[A-Za-z0-9_]+)\s*=\s*(None|True|False|-?\d+(?:\.\d+)?|'[^'\\]*'|"[^"\\]*")\s*$/;
+  const assignCount = new Map<string, number>();
+  for (const l of lines) {
+    const m = l.match(/^\s*(p_[A-Za-z0-9_]+)\s*=(?!=)/);
+    if (m) assignCount.set(m[1], (assignCount.get(m[1]) || 0) + 1);
+  }
+  const consts = new Map<string, string>();
+  for (const l of lines) {
+    const m = l.match(scalarRe);
+    if (m && assignCount.get(m[2]) === 1) consts.set(m[2], m[3]);
+  }
+  if (consts.size === 0) return code;
+  const out: string[] = [];
+  for (const l of lines) {
+    const m = l.match(scalarRe);
+    if (m && consts.has(m[2])) continue; // 스칼라 대입문 제거
+    let line = l;
+    for (const [name, val] of consts) {
+      line = line.replace(new RegExp(`\\b${name}\\b`, 'g'), val);
+    }
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
+/**
  * 모듈 타입별 내부 출력 변수명 매핑
  */
 const MODULE_OUTPUT_VAR: Record<string, string> = {
@@ -254,7 +287,7 @@ export function generateFullPipelineCode(
       moduleCode = generateLoadDataInjectionCode(module);
     } else {
       try {
-        moduleCode = activateExecutionCalls(getModuleCode(module, modules, connections));
+        moduleCode = inlineScalarParams(activateExecutionCalls(getModuleCode(module, modules, connections)));
       } catch (e: any) {
         // 코드 생성 실패 시 주석으로 숨기지 않고 Python 실행 시점에 명확한 에러 발생
         const errMsg = e?.message || String(e);
@@ -348,23 +381,31 @@ export function generateFullPipelineCode(
     codeLines.push(stripCommentsKeepCode(moduleCode));
 
     // ── 출력 변수 명시적 할당 ───────────────────────────────────────────────
+    let outputAssigned = false;
     if (outputVarName) {
       if (module.type === 'SplitData') {
         codeLines.push(`${outputVarName}_train = train_data`);
         codeLines.push(`${outputVarName}_test = test_data`);
+        outputAssigned = true;
       } else {
         let internalVar = MODULE_OUTPUT_VAR[module.type] || '';
         // 매핑되지 않은 모델 생성 모듈(LinearRegression/DecisionTree/NeuralNetwork 등)은
         // 템플릿이 일관되게 'model' 변수를 만든다 → 출력 타입이 model이면 'model'로 폴백
         if (!internalVar && module.outputs[0]?.type === 'model') internalVar = 'model';
-        if (internalVar) {
+        // 모듈 코드가 실제로 그 변수를 만들 때만 출력 변수를 할당한다.
+        // (정의 전용 모듈: OLSModel 등 통계모델 정의 — 실제 코드는 ResultModel이 생성하므로
+        //  여기서 변수를 참조하면 NameError가 난다. 템플릿이 없는 모듈도 동일하게 방지.)
+        const assignsVar =
+          !!internalVar && new RegExp(`(^|\\n)\\s*${internalVar}\\s*=(?!=)`).test(moduleCode);
+        if (assignsVar) {
           codeLines.push(`${outputVarName} = ${internalVar}`);
+          outputAssigned = true;
         }
       }
     }
 
-    // ── 실행 결과 확인용 print ──────────────────────────────────────────────
-    if (outputVarName) {
+    // ── 실행 결과 확인용 print (출력 변수가 실제로 할당된 경우에만) ───────────
+    if (outputAssigned) {
       const outputType = module.outputs.length > 0 ? module.outputs[0].type : '';
       if (module.type === 'SplitData') {
         codeLines.push(`print(f"[${module.name}] train: {${outputVarName}_train.shape}, test: {${outputVarName}_test.shape}")`);
@@ -385,8 +426,8 @@ export function generateFullPipelineCode(
 
     codeLines.push('');
 
-    // 출력 변수명을 다음 모듈을 위해 저장
-    if (outputVarName) {
+    // 출력 변수명을 다음 모듈을 위해 저장 (실제로 할당된 경우에만)
+    if (outputAssigned) {
       // SplitData는 base 변수명을 저장하고, 연결 포트에 따라 _train/_test를 위 wiring에서 부여한다.
       variableMap.set(module.id, outputVarName);
     }

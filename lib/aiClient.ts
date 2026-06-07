@@ -98,3 +98,33 @@ export function getGeminiClient(): GoogleGenAI {
   }
   return new GoogleGenAI({ apiKey });
 }
+
+/**
+ * 주어진 key로 실제 연결을 1회 시도해 유효성을 검사한다.
+ * (저장된 키가 아니라 인자로 받은 key로 테스트하므로, 저장 전 검증에 사용할 수 있다.)
+ * 401/네트워크 등 실패 유형을 분류해 사용자 친화 메시지로 반환한다. 절대 throw하지 않는다.
+ */
+export async function testApiKey(key: string): Promise<{ ok: boolean; message: string }> {
+  const trimmed = (key || "").trim();
+  if (!trimmed) {
+    return { ok: false, message: "API 키가 비어 있습니다. 키를 입력한 뒤 다시 시도해 주세요." };
+  }
+  try {
+    const ai = new GoogleGenAI({ apiKey: trimmed });
+    await ai.models.generateContent({ model: "gemini-2.5-flash", contents: "ping" });
+    return { ok: true, message: "연결 성공 · 키가 정상적으로 동작합니다." };
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err);
+    const lower = raw.toLowerCase();
+    if (lower.includes("401") || lower.includes("api key") || lower.includes("api_key") || lower.includes("permission") || lower.includes("unauthenticated") || lower.includes("invalid")) {
+      return { ok: false, message: "인증 실패(401) · API 키가 올바르지 않거나 권한이 없습니다." };
+    }
+    if (lower.includes("429") || lower.includes("quota") || lower.includes("rate")) {
+      return { ok: false, message: "요청 한도 초과(429) · 키는 유효하지만 잠시 후 다시 시도해 주세요." };
+    }
+    if (lower.includes("network") || lower.includes("fetch") || lower.includes("failed to fetch") || lower.includes("timeout") || lower.includes("enotfound")) {
+      return { ok: false, message: "네트워크 오류 · 인터넷 연결을 확인한 뒤 다시 시도해 주세요." };
+    }
+    return { ok: false, message: `연결 테스트 실패: ${raw}` };
+  }
+}

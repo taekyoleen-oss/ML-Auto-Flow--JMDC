@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { XCircleIcon } from './icons';
-import { suggestErrorFix } from '../lib/aiHelpers';
+import { streamSuggestErrorFix } from '../lib/aiHelpers';
 import { ApiKeyMissingError } from '../lib/aiClient';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
@@ -17,6 +17,7 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({ error, onClose }) => {
   const [copied, setCopied] = useState(false);
   const [suggestion, setSuggestion] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [aiError, setAiError] = useState('');
 
   useEffect(() => {
@@ -25,6 +26,7 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({ error, onClose }) => {
       setSuggestion('');
       setAiError('');
       setIsAnalyzing(false);
+      setIsStreaming(false);
     }
   }, [error]);
 
@@ -32,14 +34,17 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({ error, onClose }) => {
 
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
+    setIsStreaming(false);
     setAiError('');
     setSuggestion('');
     try {
-      const result = await suggestErrorFix(
+      for await (const chunk of streamSuggestErrorFix(
         error.message,
         `모듈: ${error.moduleName}\n${error.details ?? ''}`
-      );
-      setSuggestion(result);
+      )) {
+        setIsStreaming(true); // 첫 청크 도착 → 로딩 표시 종료
+        setSuggestion(prev => prev + chunk);
+      }
     } catch (err) {
       if (err instanceof ApiKeyMissingError) {
         // 설정 모달은 자동으로 열린다. 패널에는 간단 안내만 표시.
@@ -49,6 +54,7 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({ error, onClose }) => {
       }
     } finally {
       setIsAnalyzing(false);
+      setIsStreaming(false);
     }
   };
 
@@ -100,7 +106,7 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({ error, onClose }) => {
                 <h3 className="text-sm font-bold text-blue-700 mb-2 flex items-center gap-1.5">
                   <span aria-hidden>✨</span> AI 원인 분석
                 </h3>
-                {isAnalyzing && (
+                {isAnalyzing && !isStreaming && (
                   <p className="text-sm text-gray-500 animate-pulse">AI가 오류 원인을 분석하고 있습니다…</p>
                 )}
                 {aiError && (

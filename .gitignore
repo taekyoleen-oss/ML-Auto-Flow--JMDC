@@ -36,3 +36,7 @@ pages/api/
 database/*.db
 database/*.db-shm
 database/*.db-wal
+
+# Python bytecode cache
+__pycache__/
+*.pyc

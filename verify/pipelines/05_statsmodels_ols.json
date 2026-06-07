@@ -1,0 +1,13 @@
+{
+  "name": "statsmodels-OLS + ResultModel (insurance_claims)",
+  "requires": ["statsmodels"],
+  "modules": [
+    { "type": "LoadData", "name": "Load", "parameters": { "source": "insurance_claims.csv" } },
+    { "type": "OLSModel", "name": "OLS", "parameters": {} },
+    { "type": "ResultModel", "name": "Result", "parameters": { "feature_columns": ["race","fire","theft","age","volact","income"], "label_column": "involact" } }
+  ],
+  "connections": [
+    { "fromModuleIndex": 1, "fromPort": "model_out", "toModuleIndex": 2, "toPort": "model_in" },
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 2, "toPort": "data_in" }
+  ]
+}

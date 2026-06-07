@@ -1,0 +1,19 @@
+{
+  "name": "preprocess+analysis (insurance_claims)",
+  "requires": ["statsmodels", "seaborn", "matplotlib"],
+  "modules": [
+    { "type": "LoadData", "name": "Load", "parameters": { "source": "insurance_claims.csv" } },
+    { "type": "HandleMissingValues", "name": "Missing", "parameters": { "method": "remove_row", "strategy": "mean", "n_neighbors": 5, "metric": "nan_euclidean", "columnSelections": {} } },
+    { "type": "ScalingTransform", "name": "Scale", "parameters": { "method": "MinMax", "columnSelections": {} } },
+    { "type": "Statistics", "name": "Stats", "parameters": {} },
+    { "type": "Correlation", "name": "Corr", "parameters": { "columns": [] } },
+    { "type": "VIFChecker", "name": "VIF", "parameters": { "feature_columns": [] } }
+  ],
+  "connections": [
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 1, "toPort": "data_in" },
+    { "fromModuleIndex": 1, "fromPort": "data_out", "toModuleIndex": 2, "toPort": "data_in" },
+    { "fromModuleIndex": 2, "fromPort": "data_out", "toModuleIndex": 3, "toPort": "data_in" },
+    { "fromModuleIndex": 2, "fromPort": "data_out", "toModuleIndex": 4, "toPort": "data_in" },
+    { "fromModuleIndex": 2, "fromPort": "data_out", "toModuleIndex": 5, "toPort": "data_in" }
+  ]
+}

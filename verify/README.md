@@ -1,0 +1,43 @@
+# 전체 파이프라인 코드 검증 (verify/)
+
+이 앱의 핵심 불변식을 **자동 회귀 검증**한다:
+
+> "전체 파이프라인 코드"(PipelineCodeModal/Panel에서 복사하는 코드)를 외부 Python에
+> 그대로 가져가면 **바로 실행되고, 매번 동일한 결과**가 나온다.
+
+## 실행
+
+```bash
+pnpm run verify:pipelines      # 또는: node verify/run-verification.mjs
+```
+
+각 픽스처에 대해:
+1. 픽스처(.json)를 앱과 동일하게 hydrate하여 `generateFullPipelineCode`로 전체코드(.py) 생성
+2. 필요한 데이터셋 CSV를 임시 디렉토리에 복사
+3. 실제 `python`으로 그 .py를 **2회** 실행
+4. **(a)** 두 번 모두 exit 0 (외부 실행 가능)  **(b)** 정규화 후 stdout이 byte-identical (동일 결과 재현)
+
+하나라도 실패하면 종료코드 1 → CI에서 회귀를 잡는다.
+
+## 구성
+
+- `generate.ts` — 픽스처 → 전체코드(.py) 생성 엔트리 (esbuild로 번들되어 실행)
+- `run-verification.mjs` — 오케스트레이터(번들·생성·실행·단언·요약)
+- `pipelines/*.json` — 검증 픽스처(저장 파이프라인 포맷: `modules` + 인덱스 기반 `connections`)
+  - 선택 필드 `requires: ["statsmodels", ...]` — 해당 파이썬 패키지가 없으면 그 픽스처는 **SKIP**(FAIL 아님)
+- 데이터셋은 `Examples_in_Load/`(우선) 또는 `verify/datasets/`에서 찾는다.
+
+## 픽스처 추가하기 (새 모듈/체인 검증)
+
+1. `pipelines/NN_이름.json`을 만든다. `modules[].type`/`parameters`와 인덱스 기반 `connections`를 채운다.
+2. `LoadData.parameters.source`는 `Examples_in_Load/`에 있는 CSV 파일명으로 둔다.
+3. 특정 파이썬 패키지가 필요하면 최상위 `requires`에 적는다.
+4. `pnpm run verify:pipelines`로 PASS를 확인한다. 실패하면 생성기/템플릿의 export 버그다 — 고친다.
+
+## 알려진 제한
+
+- **클러스터링 모듈(KMeans/TrainClusteringModel/ClusteringData/DBSCAN)** 은 아직 전체코드용
+  Python 템플릿(`codeSnippets.ts`)이 없어 외부 실행 코드가 생성되지 않는다. 향후 템플릿 추가 시
+  `pipelines/`에 클러스터링 픽스처를 넣어 검증 범위에 포함한다.
+- 통계모델 정의 모듈(OLSModel 등)은 자체 실행 변수를 만들지 않고 ResultModel이 전체 코드를 생성한다.
+  생성기는 "모듈 코드가 실제로 출력 변수를 만들 때만" 출력 변수를 할당하도록 처리되어 있다.

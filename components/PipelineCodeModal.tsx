@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { XCircleIcon, CodeBracketIcon, ClipboardIcon, CheckIcon } from './icons';
-import { explainPythonCode } from '../lib/aiHelpers';
+import { streamExplainPythonCode } from '../lib/aiHelpers';
 import { ApiKeyMissingError } from '../lib/aiClient';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
@@ -14,6 +14,7 @@ export const PipelineCodeModal: React.FC<PipelineCodeModalProps> = ({ isOpen, on
     const [copied, setCopied] = useState(false);
     const [explanation, setExplanation] = useState('');
     const [isExplaining, setIsExplaining] = useState(false);
+    const [isStreaming, setIsStreaming] = useState(false);
     const [aiError, setAiError] = useState('');
 
     const handleCopy = async () => {
@@ -28,11 +29,14 @@ export const PipelineCodeModal: React.FC<PipelineCodeModalProps> = ({ isOpen, on
 
     const handleExplain = async () => {
         setIsExplaining(true);
+        setIsStreaming(false);
         setAiError('');
         setExplanation('');
         try {
-            const result = await explainPythonCode(code);
-            setExplanation(result);
+            for await (const chunk of streamExplainPythonCode(code)) {
+                setIsStreaming(true); // 첫 청크 도착 → 로딩 표시 종료
+                setExplanation(prev => prev + chunk);
+            }
         } catch (err) {
             if (err instanceof ApiKeyMissingError) {
                 // 설정 모달은 자동으로 열린다. 패널에는 간단 안내만 표시.
@@ -42,6 +46,7 @@ export const PipelineCodeModal: React.FC<PipelineCodeModalProps> = ({ isOpen, on
             }
         } finally {
             setIsExplaining(false);
+            setIsStreaming(false);
         }
     };
 
@@ -51,6 +56,7 @@ export const PipelineCodeModal: React.FC<PipelineCodeModalProps> = ({ isOpen, on
             setExplanation('');
             setAiError('');
             setIsExplaining(false);
+            setIsStreaming(false);
         }
     }, [isOpen]);
 
@@ -113,7 +119,7 @@ export const PipelineCodeModal: React.FC<PipelineCodeModalProps> = ({ isOpen, on
                             <h3 className="text-sm font-bold text-blue-700 mb-2 flex items-center gap-1.5">
                                 <span aria-hidden>✨</span> AI 코드 설명
                             </h3>
-                            {isExplaining && (
+                            {isExplaining && !isStreaming && (
                                 <p className="text-sm text-gray-500 animate-pulse">AI가 코드를 분석하고 있습니다…</p>
                             )}
                             {aiError && (
