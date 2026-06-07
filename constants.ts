@@ -257,6 +257,13 @@ export const TOOLBOX_MODULES = [
     description:
       "A density-based clustering algorithm that finds clusters of arbitrary shape and marks outliers as noise.",
   },
+  {
+    type: ModuleType.HierarchicalClustering,
+    name: "Hierarchical Clustering",
+    icon: UsersIcon,
+    description:
+      "Agglomerative clustering that merges points bottom-up into a tree, cut into a chosen number of clusters.",
+  },
 
   // Clustering Operations
   {
@@ -824,6 +831,13 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
       type: ModuleType.DBSCAN,
       status: ModuleStatus.Pending,
       parameters: { eps: 0.5, min_samples: 5 },
+      inputs: [],
+      outputs: [{ name: "model_out", type: "model" }],
+    },
+    {
+      type: ModuleType.HierarchicalClustering,
+      status: ModuleStatus.Pending,
+      parameters: { n_clusters: 3, linkage: "ward", metric: "euclidean" },
       inputs: [],
       outputs: [{ name: "model_out", type: "model" }],
     },

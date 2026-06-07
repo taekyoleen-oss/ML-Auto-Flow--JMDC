@@ -980,6 +980,26 @@ print(f"DBSCAN model instance created (eps={p_eps}, min_samples={p_min_samples})
 # (incl. -1 for noise) are computed during .fit and exposed via .labels_.
 # model variable contains the estimator instance ready for training.
 `,
+  HierarchicalClustering: `
+from sklearn.cluster import AgglomerativeClustering
+
+# This module creates an Agglomerative (hierarchical) clustering model instance.
+# The model will be fitted in the 'Train Clustering Model' module.
+# Parameters from UI
+p_n_clusters = {n_clusters}
+p_linkage = {linkage}
+p_metric = {metric}
+# 'ward' linkage only supports the euclidean metric.
+if p_linkage == 'ward':
+    p_metric = 'euclidean'
+
+model = AgglomerativeClustering(n_clusters=p_n_clusters, linkage=p_linkage, metric=p_metric)
+
+print(f"Agglomerative clustering model instance created (n_clusters={p_n_clusters}, linkage={p_linkage}).")
+# Note: hierarchical clustering is transductive — labels are computed during .fit
+# and exposed via .labels_ (no separate .predict).
+# model variable contains the estimator instance ready for training.
+`,
   TrainClusteringModel: `
 import pandas as pd
 

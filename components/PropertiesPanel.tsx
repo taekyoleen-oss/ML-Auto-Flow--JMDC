@@ -3199,6 +3199,24 @@ const renderParameters = (
           />
         </>
       );
+    // Hierarchical(Agglomerative): 모델 정의만 (클러스터 수 + 연결 방법)
+    case ModuleType.HierarchicalClustering:
+      return (
+        <>
+          <PropertyInput
+            label="Number of Clusters"
+            value={module.parameters.n_clusters ?? 3}
+            type="number"
+            onChange={(v) => onParamChange("n_clusters", v)}
+          />
+          <PropertySelect
+            label="Linkage (연결 방법)"
+            value={module.parameters.linkage || "ward"}
+            options={["ward", "complete", "average", "single"]}
+            onChange={(v) => onParamChange("linkage", v)}
+          />
+        </>
+      );
     // TrainClusteringModel: feature_columns 선택
     case ModuleType.TrainClusteringModel: {
       const sourceData = getConnectedDataSource(module.id);

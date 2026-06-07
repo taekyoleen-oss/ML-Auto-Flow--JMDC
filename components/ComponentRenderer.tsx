@@ -347,6 +347,7 @@ const noRunButtonTypes = [
   ModuleType.KMeans,
   ModuleType.PrincipalComponentAnalysis,
   ModuleType.DBSCAN,
+  ModuleType.HierarchicalClustering,
   ModuleType.StatModels,
   // Deprecated
   ModuleType.LogisticTradition,

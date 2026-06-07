@@ -45,7 +45,10 @@ pnpm run verify:pipelines      # 또는: node verify/run-verification.mjs
 - **DBSCAN 체인(DBSCAN→TrainClusteringModel→ClusteringData)** 도 외부 실행+재현 검증된다(`09_dbscan.json`).
   DBSCAN은 transductive(`.predict` 없음)라 `ClusteringData`가 `.labels_` 분기로 클러스터(-1=노이즈)를 할당한다.
   ModuleType.DBSCAN 신설 + 팔레트/DEFAULT_MODULES/PropertiesPanel(eps·min_samples)/ComponentRenderer 등록 완료.
-- **계층적 클러스터링(Agglomerative)** 은 `data_analysis_modules.py`에 함수만 있고 캔버스 ModuleType이 없어 범위 외
-  (추가 시 DBSCAN과 동일하게 `.labels_` 분기로 처리되며 픽스처만 추가하면 된다).
+- **계층적 클러스터링 체인(HierarchicalClustering→TrainClusteringModel→ClusteringData)** 도 외부 실행+재현
+  검증된다(`10_hierarchical.json`). AgglomerativeClustering 역시 transductive라 `.labels_` 분기로 처리된다.
+  ModuleType.HierarchicalClustering 신설 + 팔레트/DEFAULT_MODULES/PropertiesPanel(n_clusters·linkage)/ComponentRenderer
+  등록 완료. (sklearn 1.7 호환: `affinity` 대신 `metric` 사용, ward는 euclidean 강제.)
+- 이로써 클러스터링 패밀리 **KMeans·PCA·DBSCAN·Hierarchical** 의 전체코드 내보내기가 모두 검증된다.
 - 통계모델 정의 모듈(OLSModel 등)은 자체 실행 변수를 만들지 않고 ResultModel이 전체 코드를 생성한다.
   생성기는 "모듈 코드가 실제로 출력 변수를 만들 때만" 출력 변수를 할당하도록 처리되어 있다.

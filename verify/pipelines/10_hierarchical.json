@@ -1,0 +1,15 @@
+{
+  "name": "clustering-hierarchical (iris)",
+  "modules": [
+    { "type": "LoadData", "name": "Load", "parameters": { "source": "iris.csv" } },
+    { "type": "HierarchicalClustering", "name": "Agglomerative", "parameters": { "n_clusters": 3, "linkage": "ward", "metric": "euclidean" } },
+    { "type": "TrainClusteringModel", "name": "FitHier", "parameters": { "feature_columns": [] } },
+    { "type": "ClusteringData", "name": "AssignClusters", "parameters": {} }
+  ],
+  "connections": [
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 2, "toPort": "data_in" },
+    { "fromModuleIndex": 1, "fromPort": "model_out", "toModuleIndex": 2, "toPort": "model_in" },
+    { "fromModuleIndex": 2, "fromPort": "trained_model_out", "toModuleIndex": 3, "toPort": "model_in" },
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 3, "toPort": "data_in" }
+  ]
+}

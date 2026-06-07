@@ -45,6 +45,7 @@ export enum ModuleType {
   // 죽어있던 PCA 분기가 실제 PCA 모듈(type "PCA")과 매칭되도록 한다.
   PrincipalComponentAnalysis = "PCA",
   DBSCAN = "DBSCAN",
+  HierarchicalClustering = "HierarchicalClustering",
 
   // Clustering Operations
   TrainClusteringModel = "TrainClusteringModel",
