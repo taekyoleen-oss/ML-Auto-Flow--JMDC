@@ -59,10 +59,19 @@ export const ModuleDescriptionModal: React.FC<ModuleDescriptionModalProps> = ({
           ) : (
             <div className="space-y-5 text-sm leading-relaxed">
               <Section title="역할" body={desc.role} />
+              {desc.whenToUse && (
+                <Section title="언제 사용하나요" body={desc.whenToUse} tone="when" />
+              )}
               <Section title="입력" body={desc.input} />
               <Section title="결과" body={desc.output} />
               {desc.parameters && (
                 <Section title="파라미터" body={desc.parameters} mono />
+              )}
+              {desc.connections && (
+                <Section title="권장 연결" body={desc.connections} tone="link" />
+              )}
+              {desc.commonErrors && (
+                <Section title="흔한 오류" body={desc.commonErrors} tone="warn" />
               )}
               {desc.notes && (
                 <Section title="비고" body={desc.notes} muted />
@@ -84,26 +93,64 @@ export const ModuleDescriptionModal: React.FC<ModuleDescriptionModalProps> = ({
   );
 };
 
+type Tone = "when" | "link" | "warn";
+
+const TONE_STYLES: Record<
+  Tone,
+  { heading: string; box: string; icon: string }
+> = {
+  when: {
+    heading: "text-emerald-700 dark:text-emerald-400",
+    box: "bg-emerald-50 dark:bg-emerald-900/20 border-l-4 border-emerald-400 dark:border-emerald-600 p-2.5 rounded-r",
+    icon: "💡",
+  },
+  link: {
+    heading: "text-indigo-700 dark:text-indigo-400",
+    box: "bg-indigo-50 dark:bg-indigo-900/20 border-l-4 border-indigo-400 dark:border-indigo-600 p-2.5 rounded-r",
+    icon: "🔗",
+  },
+  warn: {
+    heading: "text-amber-700 dark:text-amber-400",
+    box: "bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-400 dark:border-amber-600 p-2.5 rounded-r",
+    icon: "⚠️",
+  },
+};
+
 const Section: React.FC<{
   title: string;
   body: string;
   mono?: boolean;
   muted?: boolean;
-}> = ({ title, body, mono, muted }) => (
-  <section>
-    <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-1">
-      {title}
-    </h3>
-    <p
-      className={[
-        "whitespace-pre-wrap",
-        mono ? "font-mono text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded border border-gray-200 dark:border-gray-700" : "",
-        muted ? "text-gray-600 dark:text-gray-400 text-xs" : "text-gray-800 dark:text-gray-200",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      {body}
-    </p>
-  </section>
-);
+  tone?: Tone;
+}> = ({ title, body, mono, muted, tone }) => {
+  const toneStyle = tone ? TONE_STYLES[tone] : null;
+  return (
+    <section>
+      <h3
+        className={[
+          "text-sm font-semibold mb-1",
+          toneStyle ? toneStyle.heading : "text-blue-700 dark:text-blue-400",
+        ].join(" ")}
+      >
+        {toneStyle ? `${toneStyle.icon} ` : ""}
+        {title}
+      </h3>
+      <p
+        className={[
+          "whitespace-pre-wrap",
+          mono
+            ? "font-mono text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded border border-gray-200 dark:border-gray-700"
+            : "",
+          toneStyle ? toneStyle.box : "",
+          muted
+            ? "text-gray-600 dark:text-gray-400 text-xs"
+            : "text-gray-800 dark:text-gray-200",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        {body}
+      </p>
+    </section>
+  );
+};
