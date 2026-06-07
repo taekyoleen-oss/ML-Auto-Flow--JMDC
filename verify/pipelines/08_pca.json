@@ -1,0 +1,15 @@
+{
+  "name": "pca-dimreduction (iris)",
+  "modules": [
+    { "type": "LoadData", "name": "Load", "parameters": { "source": "iris.csv" } },
+    { "type": "PCA", "name": "PCA", "parameters": { "n_components": 2 } },
+    { "type": "TrainClusteringModel", "name": "FitPCA", "parameters": { "feature_columns": [] } },
+    { "type": "ClusteringData", "name": "Transform", "parameters": {} }
+  ],
+  "connections": [
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 2, "toPort": "data_in" },
+    { "fromModuleIndex": 1, "fromPort": "model_out", "toModuleIndex": 2, "toPort": "model_in" },
+    { "fromModuleIndex": 2, "fromPort": "trained_model_out", "toModuleIndex": 3, "toPort": "model_in" },
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 3, "toPort": "data_in" }
+  ]
+}

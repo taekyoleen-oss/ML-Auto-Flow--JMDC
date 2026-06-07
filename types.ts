@@ -40,6 +40,10 @@ export enum ModuleType {
   // Unsupervised Learning
   KMeans = "KMeans",
   PCA = "PCA",
+  // 별칭: App.tsx/PropertiesPanel/ComponentRenderer/constants(DEFAULT_MODULES)가
+  // PrincipalComponentAnalysis를 참조한다. 동일 값("PCA") 별칭 멤버로 정합성을 맞춰
+  // 죽어있던 PCA 분기가 실제 PCA 모듈(type "PCA")과 매칭되도록 한다.
+  PrincipalComponentAnalysis = "PCA",
 
   // Clustering Operations
   TrainClusteringModel = "TrainClusteringModel",
