@@ -126,6 +126,8 @@ import { ErrorModal } from "./components/ErrorModal";
 import SamplesModal from "./components/SamplesModal";
 import { SamplesManagementModal } from "./components/SamplesManagementModal";
 import { GoogleGenAI, Type } from "@google/genai";
+import { getGeminiClient, OPEN_API_KEY_SETTINGS_EVENT } from './lib/aiClient';
+import { ApiKeySettingsModal } from "./components/ApiKeySettingsModal";
 import { savePipeline, loadPipeline } from "./utils/fileOperations";
 import { setPyodideStatusCallback } from "./utils/pyodideRunner";
 import { classifyPythonError, validateModuleParameters, validateModuleConnections } from "./utils/pipelineValidation";
@@ -254,6 +256,13 @@ const App: React.FC = () => {
   const [showRunHistory, setShowRunHistory] = useState(false);
   const [runHistory, setRunHistory] = useState<RunHistorySession[]>([]);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+  // AI 호출부에서 키가 없을 때 자동으로 설정 모달을 연다.
+  useEffect(() => {
+    const open = () => setIsApiKeyModalOpen(true);
+    window.addEventListener(OPEN_API_KEY_SETTINGS_EVENT, open);
+    return () => window.removeEventListener(OPEN_API_KEY_SETTINGS_EVENT, open);
+  }, []);
   const [shareLinkCopied, setShareLinkCopied] = useState(false);
 
   // #11: Run All 진행률 상태
@@ -534,11 +543,7 @@ const App: React.FC = () => {
         `AI is suggesting a module to connect to '${fromModule.name}'...`
       );
       try {
-        const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-          throw new Error("GEMINI_API_KEY가 설정되지 않았습니다. .env.local 파일에 GEMINI_API_KEY를 설정하고 개발 서버를 재시작해주세요.");
-        }
-        const ai = new GoogleGenAI({ apiKey: apiKey });
+        const ai = getGeminiClient();
         const fromPort = fromModule.outputs.find(
           (p) => p.name === fromPortName
         );
@@ -1481,20 +1486,7 @@ Respond with ONLY the module type string, for example: 'ScoreModel'`;
     addLog("INFO", "AI pipeline generation started...");
     try {
       // API 키 확인
-      const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        addLog("ERROR", "API 키를 찾을 수 없습니다. 개발 서버를 재시작해주세요.");
-        throw new Error(
-          "GEMINI_API_KEY가 설정되지 않았습니다.\n\n" +
-          "해결 방법:\n" +
-          "1. 프로젝트 루트에 .env.local 파일이 있는지 확인하세요.\n" +
-          "2. .env.local 파일에 다음을 추가하세요:\n" +
-          "   GEMINI_API_KEY=your_api_key_here\n" +
-          "3. 개발 서버를 재시작하세요 (Ctrl+C 후 npm run dev)"
-        );
-      }
-
-      const ai = new GoogleGenAI({ apiKey: apiKey });
+      const ai = getGeminiClient();
 
       const moduleDescriptions: Record<string, string> = {
         LoadData: "Loads a dataset from a user-provided CSV file.",
@@ -10946,6 +10938,13 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
           >
             ?
           </button>
+          <button
+            onClick={() => setIsApiKeyModalOpen(true)}
+            className="p-1.5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors flex-shrink-0 text-sm"
+            title="AI 설정 (Gemini API 키)"
+          >
+            ⚙
+          </button>
           <div className="h-5 border-l border-gray-700"></div>
           <button
             onClick={handleShareLink}
@@ -12170,6 +12169,11 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
       {/* 단축키 안내 모달 */}
       {showShortcuts && (
         <ShortcutsModal onClose={() => setShowShortcuts(false)} />
+      )}
+
+      {/* AI 설정 (Gemini API 키) 모달 */}
+      {isApiKeyModalOpen && (
+        <ApiKeySettingsModal onClose={() => setIsApiKeyModalOpen(false)} />
       )}
 
       {/* Samples Modal */}

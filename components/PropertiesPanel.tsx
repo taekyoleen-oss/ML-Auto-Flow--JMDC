@@ -38,6 +38,7 @@ import {
 import { getModuleCode } from "../codeSnippets";
 // Examples_in_Load 디렉토리에서 예제 데이터를 로드하는 함수는 아래에서 정의
 import { GoogleGenAI, Type } from "@google/genai";
+import { getGeminiClient } from '../lib/aiClient';
 import { DEFAULT_MODULES } from "../constants";
 import { ExcelInputModal } from "./ExcelInputModal";
 import { DataAnalysisRAGModal } from "./DataAnalysisRAGModal";
@@ -180,11 +181,7 @@ const AIModuleExplanation: React.FC<{ module: CanvasModule }> = ({
     setIsLoading(true);
     setShow(true);
     try {
-      const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error("GEMINI_API_KEY가 설정되지 않았습니다. .env.local 파일에 GEMINI_API_KEY를 설정하고 개발 서버를 재시작해주세요.");
-      }
-      const ai = new GoogleGenAI({ apiKey: apiKey });
+      const ai = getGeminiClient();
 
       const defaultModuleData = DEFAULT_MODULES.find(
         (m) => m.type === module.type
@@ -300,11 +297,7 @@ const AIParameterRecommender: React.FC<{
   const handleRecommend = async () => {
     setIsLoading(true);
     try {
-      const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error("GEMINI_API_KEY가 설정되지 않았습니다. .env.local 파일에 GEMINI_API_KEY를 설정하고 개발 서버를 재시작해주세요.");
-      }
-      const ai = new GoogleGenAI({ apiKey: apiKey });
+      const ai = getGeminiClient();
 
       const prompt = `
 You are an expert data scientist AI assistant. Your task is to recommend the optimal feature columns and a single label/target column for a machine learning model based on a project goal and a list of available data columns.
@@ -402,7 +395,8 @@ const PropertyInput: React.FC<{
   type?: string;
   step?: string;
   placeholder?: string;
-}> = ({ label, value, onChange, type = "text", step, placeholder }) => (
+  description?: string;
+}> = ({ label, value, onChange, type = "text", step, placeholder, description }) => (
   <div className="mb-3 last:mb-0">
     <label className="block text-sm text-gray-700 dark:text-gray-400 mb-1">{label}</label>
     <input
@@ -421,6 +415,9 @@ const PropertyInput: React.FC<{
       }
       className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
     />
+    {description && (
+      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 leading-snug">{description}</p>
+    )}
   </div>
 );
 
@@ -428,27 +425,40 @@ const PropertySelect: React.FC<{
   label: string;
   value: any;
   onChange: (value: string) => void;
-  options: (string | { label: string; value: string })[];
-}> = ({ label, value, onChange, options }) => (
-  <div className="mb-3 last:mb-0">
-    <label className="block text-sm text-gray-700 dark:text-gray-400 mb-1">{label}</label>
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-    >
-      {options.map((opt) => {
-        const optionValue = typeof opt === "string" ? opt : opt.value;
-        const optionLabel = typeof opt === "string" ? opt : opt.label;
-        return (
-          <option key={optionValue} value={optionValue}>
-            {optionLabel}
-          </option>
-        );
-      })}
-    </select>
-  </div>
-);
+  options: (string | { label: string; value: string; description?: string })[];
+  description?: string;
+}> = ({ label, value, onChange, options, description }) => {
+  const selected = options.find(
+    (opt) => (typeof opt === "string" ? opt : opt.value) === value
+  );
+  const selectedDescription =
+    typeof selected === "object" ? selected?.description : undefined;
+  return (
+    <div className="mb-3 last:mb-0">
+      <label className="block text-sm text-gray-700 dark:text-gray-400 mb-1">{label}</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        {options.map((opt) => {
+          const optionValue = typeof opt === "string" ? opt : opt.value;
+          const optionLabel = typeof opt === "string" ? opt : opt.label;
+          return (
+            <option key={optionValue} value={optionValue}>
+              {optionLabel}
+            </option>
+          );
+        })}
+      </select>
+      {(selectedDescription || description) && (
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 leading-snug">
+          {selectedDescription || description}
+        </p>
+      )}
+    </div>
+  );
+};
 
 const PropertyCheckbox: React.FC<{
   label: string;
@@ -3890,6 +3900,162 @@ const renderParameters = (
               ))}
             </div>
           </div>
+        </div>
+      );
+    }
+    case ModuleType.JMDCCohortBuilder: {
+      const {
+        data_source = "synthetic",
+        synthetic_n = 100000,
+        synthetic_seed = 43,
+        index_date_rule = "birthday_age",
+        index_age = 50,
+        index_fixed_date = "2018-01-01",
+        age_at_index_min = 30,
+        age_at_index_max = 70,
+        washout_years = 2,
+        exclusion_diseases = ["C00-C97"],
+        disease_free_years = 0,
+      } = module.parameters;
+
+      const dataSourceOptions = [
+        {
+          value: "synthetic",
+          label: "Synthetic (오프라인 데모용 가상 데이터)",
+          description:
+            "내장 생성기로 JMDC-유사 가상 데이터를 만듭니다. 외부 입력 없이 단독 실행 가능합니다.",
+        },
+        {
+          value: "csv",
+          label: "CSV (data_in 포트로 연결된 CSV 사용)",
+          description:
+            "Load Data 등으로 연결된 CSV(member·claim·disease long format)를 사용합니다. data_in 포트 연결이 필요합니다.",
+        },
+        {
+          value: "supabase",
+          label: "Supabase (data_in 포트로 연결된 Supabase 테이블 사용)",
+          description:
+            "Supabase에서 로드해 data_in 포트로 연결된 데이터를 사용합니다. data_in 포트 연결이 필요합니다.",
+        },
+      ];
+
+      const indexDateRuleOptions = [
+        {
+          value: "birthday_age",
+          label: "birthday_age (생일 기준 만 N세 시점)",
+          description:
+            "member의 birth_date에 지정한 Index Age(년)을 더해 Index Date를 정합니다.",
+        },
+        {
+          value: "enrollment_date",
+          label: "enrollment_date (가입/첫 관찰 시점)",
+          description: "member의 first_obs_date를 Index Date로 사용합니다.",
+        },
+        {
+          value: "fixed_date",
+          label: "fixed_date (고정 일자)",
+          description:
+            "모든 member에 대해 Index Fixed Date를 Index Date로 사용합니다.",
+        },
+      ];
+
+      const exclusionStr = Array.isArray(exclusion_diseases)
+        ? exclusion_diseases.join(", ")
+        : String(exclusion_diseases ?? "");
+
+      return (
+        <div>
+          <PropertySelect
+            label="Data Source"
+            value={data_source}
+            onChange={(v) => onParamChange("data_source", v)}
+            options={dataSourceOptions}
+          />
+          {data_source === "synthetic" && (
+            <>
+              <PropertyInput
+                label="Synthetic N (생성할 가상 member 수)"
+                type="number"
+                value={synthetic_n}
+                onChange={(v) => onParamChange("synthetic_n", v)}
+                description="합성 데이터 모드에서 생성할 가상 member 수입니다."
+              />
+              <PropertyInput
+                label="Synthetic Seed (재현용 난수 시드)"
+                type="number"
+                value={synthetic_seed}
+                onChange={(v) => onParamChange("synthetic_seed", v)}
+                description="같은 시드를 쓰면 동일한 합성 데이터가 재현됩니다."
+              />
+            </>
+          )}
+          <PropertySelect
+            label="Index Date Rule"
+            value={index_date_rule}
+            onChange={(v) => onParamChange("index_date_rule", v)}
+            options={indexDateRuleOptions}
+          />
+          {index_date_rule === "birthday_age" && (
+            <PropertyInput
+              label="Index Age (만 N세 시점)"
+              type="number"
+              value={index_age}
+              onChange={(v) => onParamChange("index_age", v)}
+              description="birthday_age 규칙에서 Index Date로 잡을 만 나이입니다."
+            />
+          )}
+          {index_date_rule === "fixed_date" && (
+            <PropertyInput
+              label="Index Fixed Date (YYYY-MM-DD)"
+              value={index_fixed_date}
+              onChange={(v) => onParamChange("index_fixed_date", v)}
+              placeholder="2018-01-01"
+              description="fixed_date 규칙에서 모든 member의 공통 Index Date입니다."
+            />
+          )}
+          <PropertyInput
+            label="Age at Index — Min"
+            type="number"
+            value={age_at_index_min}
+            onChange={(v) => onParamChange("age_at_index_min", v)}
+            description="Index Date 시점의 최소 연령(이상). 미만은 코호트에서 제외됩니다."
+          />
+          <PropertyInput
+            label="Age at Index — Max"
+            type="number"
+            value={age_at_index_max}
+            onChange={(v) => onParamChange("age_at_index_max", v)}
+            description="Index Date 시점의 최대 연령(이하). 초과는 코호트에서 제외됩니다."
+          />
+          <PropertyInput
+            label="Washout Years (Index 이전 관찰 기간)"
+            type="number"
+            value={washout_years}
+            onChange={(v) => onParamChange("washout_years", v)}
+            description="Index Date 이전에 최소 몇 년의 연속 관찰 기록이 있어야 하는지입니다."
+          />
+          <PropertyInput
+            label="Exclusion Diseases (ICD-10 prefix, comma-separated)"
+            value={exclusionStr}
+            onChange={(v) =>
+              onParamChange(
+                "exclusion_diseases",
+                String(v ?? "")
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+              )
+            }
+            placeholder="C00-C97, I20"
+            description="Index Date 이전 이 ICD-10 코드 prefix(또는 범위)에 해당하면 제외됩니다. 콤마로 구분."
+          />
+          <PropertyInput
+            label="Disease-free Years"
+            type="number"
+            value={disease_free_years}
+            onChange={(v) => onParamChange("disease_free_years", v)}
+            description="Index Date 이전 N년간 Exclusion Diseases가 없어야 코호트에 포함됩니다. 0이면 미적용."
+          />
         </div>
       );
     }

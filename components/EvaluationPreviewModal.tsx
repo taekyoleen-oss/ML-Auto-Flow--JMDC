@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { CanvasModule, EvaluationOutput, ConfusionMatrix, DataPreview, Connection } from '../types';
 import { XCircleIcon } from './icons';
+import { explainModuleResult } from '../lib/aiHelpers';
+import { ApiKeyMissingError } from '../lib/aiClient';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 // C-1: 인터랙티브 메트릭 바 차트
 const MetricBarChart: React.FC<{ metrics: Record<string, number | string>; modelType: 'classification' | 'regression' }> = ({ metrics, modelType }) => {
@@ -114,6 +117,10 @@ export const EvaluationPreviewModal: React.FC<EvaluationPreviewModalProps> = ({
     const [selectedRow, setSelectedRow] = useState<ThresholdTableRow | null>(null);
     const [selectedColumn1, setSelectedColumn1] = useState<string>('accuracy');
     const [selectedColumn2, setSelectedColumn2] = useState<string>('');
+    // ✨ AI 해설
+    const [explanation, setExplanation] = useState('');
+    const [isExplaining, setIsExplaining] = useState(false);
+    const [aiError, setAiError] = useState('');
 
     // 선택 가능한 열 목록
     const availableColumns = [
@@ -331,6 +338,39 @@ export const EvaluationPreviewModal: React.FC<EvaluationPreviewModalProps> = ({
         }
     }, [modelType, getInputData, module.parameters]);
 
+    // ✨ AI 해설: 평가 지표/혼동행렬을 요약하여 explainModuleResult에 전달
+    const handleExplain = async () => {
+        setIsExplaining(true);
+        setAiError('');
+        setExplanation('');
+        try {
+            const metricLines = Object.entries(metrics)
+                .map(([k, v]) => `- ${k}: ${typeof v === 'number' ? v.toFixed(4) : v}`)
+                .join('\n');
+
+            let cmLine = '';
+            if (modelType === 'classification' && selectedRow) {
+                cmLine = `\n\n[혼동행렬 (threshold=${selectedRow.threshold.toFixed(2)})]\n- TP=${selectedRow.tp}, FP=${selectedRow.fp}, TN=${selectedRow.tn}, FN=${selectedRow.fn}`;
+                if (auc > 0) cmLine += `\n- AUC=${auc.toFixed(4)}`;
+            }
+
+            const summary = `모델 유형: ${modelType}\n\n[성능 지표]\n${metricLines}${cmLine}`;
+            const result = await explainModuleResult(
+                modelType === 'classification' ? 'Evaluation(분류 모델 평가)' : 'Evaluation(회귀 모델 평가)',
+                summary
+            );
+            setExplanation(result);
+        } catch (err) {
+            if (err instanceof ApiKeyMissingError) {
+                setAiError('Gemini API 키가 필요합니다. 설정(⚙)에서 키를 입력한 뒤 다시 시도하세요.');
+            } else {
+                setAiError(`AI 해설 생성 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`);
+            }
+        } finally {
+            setIsExplaining(false);
+        }
+    };
+
     return (
         <div 
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
@@ -345,11 +385,36 @@ export const EvaluationPreviewModal: React.FC<EvaluationPreviewModalProps> = ({
                         <h2 className="text-xl font-bold text-gray-800">Evaluation Results: {module.name}</h2>
                         <p className="text-sm text-gray-500">Model Type: <span className="capitalize">{modelType}</span></p>
                     </div>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
-                        <XCircleIcon className="w-6 h-6" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleExplain}
+                            disabled={isExplaining}
+                            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                            title="AI가 이 평가 결과를 해설합니다"
+                        >
+                            <span aria-hidden>✨</span>
+                            <span>{isExplaining ? 'AI 분석 중…' : 'AI 해설'}</span>
+                        </button>
+                        <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
+                            <XCircleIcon className="w-6 h-6" />
+                        </button>
+                    </div>
                 </header>
                 <main className="flex-grow p-6 overflow-auto">
+                    {/* ✨ AI 해설 패널 */}
+                    {(isExplaining || explanation || aiError) && (
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-4">
+                            <h3 className="text-lg font-bold text-blue-800 mb-2 flex items-center gap-2">
+                                <span aria-hidden>✨</span> AI 해설
+                            </h3>
+                            {isExplaining && (
+                                <p className="text-sm text-gray-500 animate-pulse">AI가 평가 결과를 해설하고 있습니다…</p>
+                            )}
+                            {aiError && <p className="text-sm text-red-600">{aiError}</p>}
+                            {explanation && <MarkdownRenderer text={explanation} />}
+                        </div>
+                    )}
+
                     {/* Performance Metrics - 선택된 threshold의 통계량 표시 */}
                     {modelType === 'classification' && selectedRow && (
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">

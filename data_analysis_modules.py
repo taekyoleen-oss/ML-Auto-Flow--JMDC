@@ -1049,7 +1049,7 @@ def create_random_forest(model_purpose: str = 'classification', n_estimators: in
 
 
 def create_neural_network(model_purpose: str = 'classification', hidden_layer_sizes: str = '100',
-                         activation: str = 'relu', max_iter: int = 200):
+                         activation: str = 'relu', max_iter: int = 200, random_state: int = 42):
     """
     신경망 모델을 생성합니다.
     

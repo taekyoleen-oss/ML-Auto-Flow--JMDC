@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { XCircleIcon, CodeBracketIcon, ClipboardIcon, CheckIcon } from './icons';
+import { explainPythonCode } from '../lib/aiHelpers';
+import { ApiKeyMissingError } from '../lib/aiClient';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface PipelineCodeModalProps {
     isOpen: boolean;
@@ -9,6 +12,9 @@ interface PipelineCodeModalProps {
 
 export const PipelineCodeModal: React.FC<PipelineCodeModalProps> = ({ isOpen, onClose, code }) => {
     const [copied, setCopied] = useState(false);
+    const [explanation, setExplanation] = useState('');
+    const [isExplaining, setIsExplaining] = useState(false);
+    const [aiError, setAiError] = useState('');
 
     const handleCopy = async () => {
         try {
@@ -20,21 +26,45 @@ export const PipelineCodeModal: React.FC<PipelineCodeModalProps> = ({ isOpen, on
         }
     };
 
+    const handleExplain = async () => {
+        setIsExplaining(true);
+        setAiError('');
+        setExplanation('');
+        try {
+            const result = await explainPythonCode(code);
+            setExplanation(result);
+        } catch (err) {
+            if (err instanceof ApiKeyMissingError) {
+                // 설정 모달은 자동으로 열린다. 패널에는 간단 안내만 표시.
+                setAiError('Gemini API 키가 필요합니다. 설정(⚙)에서 키를 입력한 뒤 다시 시도하세요.');
+            } else {
+                setAiError(`AI 설명 생성 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`);
+            }
+        } finally {
+            setIsExplaining(false);
+        }
+    };
+
     useEffect(() => {
         if (!isOpen) {
             setCopied(false);
+            setExplanation('');
+            setAiError('');
+            setIsExplaining(false);
         }
     }, [isOpen]);
 
     if (!isOpen) return null;
 
+    const showPanel = isExplaining || !!explanation || !!aiError;
+
     return (
-        <div 
+        <div
             className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
             onClick={onClose}
         >
-            <div 
-                className="bg-gray-800 text-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col"
+            <div
+                className="bg-gray-800 text-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col"
                 onClick={e => e.stopPropagation()}
             >
                 <header className="flex items-center justify-between p-4 border-b border-gray-700 flex-shrink-0">
@@ -43,6 +73,15 @@ export const PipelineCodeModal: React.FC<PipelineCodeModalProps> = ({ isOpen, on
                         전체 파이프라인 코드
                     </h2>
                     <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleExplain}
+                            disabled={isExplaining}
+                            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-colors"
+                            title="AI가 이 Python 코드를 설명합니다"
+                        >
+                            <span aria-hidden>✨</span>
+                            <span>{isExplaining ? 'AI 분석 중…' : 'AI 설명'}</span>
+                        </button>
                         <button
                             onClick={handleCopy}
                             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded-md transition-colors"
@@ -65,10 +104,28 @@ export const PipelineCodeModal: React.FC<PipelineCodeModalProps> = ({ isOpen, on
                         </button>
                     </div>
                 </header>
-                <main className="flex-1 overflow-auto p-4">
-                    <pre className="bg-gray-900 p-4 rounded-md overflow-x-auto text-sm font-mono text-gray-200 whitespace-pre-wrap">
+                <main className="flex-1 overflow-hidden p-4 flex gap-4 min-h-0">
+                    <pre className={`bg-gray-900 p-4 rounded-md overflow-auto text-sm font-mono text-gray-200 whitespace-pre-wrap ${showPanel ? 'w-1/2' : 'w-full'}`}>
                         <code>{code}</code>
                     </pre>
+                    {showPanel && (
+                        <div className="w-1/2 bg-white text-gray-800 rounded-md overflow-auto p-4">
+                            <h3 className="text-sm font-bold text-blue-700 mb-2 flex items-center gap-1.5">
+                                <span aria-hidden>✨</span> AI 코드 설명
+                            </h3>
+                            {isExplaining && (
+                                <p className="text-sm text-gray-500 animate-pulse">AI가 코드를 분석하고 있습니다…</p>
+                            )}
+                            {aiError && (
+                                <p className="text-sm text-red-600">{aiError}</p>
+                            )}
+                            {explanation && (
+                                <div className="text-sm leading-relaxed">
+                                    <MarkdownRenderer text={explanation} />
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </main>
                 <footer className="flex justify-end p-4 bg-gray-900 rounded-b-lg border-t border-gray-700 flex-shrink-0">
                     <button
@@ -82,49 +139,3 @@ export const PipelineCodeModal: React.FC<PipelineCodeModalProps> = ({ isOpen, on
         </div>
     );
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

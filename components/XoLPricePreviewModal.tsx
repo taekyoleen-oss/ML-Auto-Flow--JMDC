@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CanvasModule, XoLPriceOutput } from '../types';
 import { XCircleIcon, SparklesIcon } from './icons';
 import { GoogleGenAI } from "@google/genai";
+import { getGeminiClient } from '../lib/aiClient';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface XoLPricePreviewModalProps {
@@ -31,7 +32,7 @@ export const XoLPricePreviewModal: React.FC<XoLPricePreviewModalProps> = ({ modu
         setIsInterpreting(true);
         setAiInterpretation(null);
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+            const ai = getGeminiClient();
             const prompt = `
 You are a reinsurance expert writing a brief pricing summary for a client. Use Korean and simple Markdown.
 

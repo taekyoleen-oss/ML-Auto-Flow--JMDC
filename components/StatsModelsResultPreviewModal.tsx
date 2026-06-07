@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CanvasModule, StatsModelsResultOutput } from '../types';
 import { XCircleIcon, SparklesIcon } from './icons';
 import { GoogleGenAI } from "@google/genai";
+import { getGeminiClient } from '../lib/aiClient';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface StatsModelsResultPreviewModalProps {
@@ -69,7 +70,7 @@ export const StatsModelsResultPreviewModal: React.FC<StatsModelsResultPreviewMod
         setIsInterpreting(true);
         setAiInterpretation(null);
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+            const ai = getGeminiClient();
 
             const metricsText = Object.entries(output.summary.metrics).map(([key, value]) => `- ${key}: ${value}`).join('\n');
             const coefficientsText = Object.entries(output.summary.coefficients).map(([param, values]) => {

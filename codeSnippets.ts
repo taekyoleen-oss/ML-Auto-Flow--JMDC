@@ -1,5 +1,23 @@
 import { CanvasModule, Connection } from "./types";
 
+/**
+ * JS 값을 유효한 Python 리터럴 문자열로 변환한다(재귀).
+ * 객체/배열을 JSON.stringify로 직렬화하면 JS 불리언(true/false)·null이 그대로 들어가
+ * Python에서 NameError가 발생한다. 외부 Python에서 바로 실행 가능하도록 True/False/None으로 변환한다.
+ */
+const toPyLiteral = (v: any): string => {
+  if (v === null || v === undefined) return "None";
+  if (typeof v === "boolean") return v ? "True" : "False";
+  if (typeof v === "number") return Number.isFinite(v) ? String(v) : "None";
+  if (typeof v === "string") return `'${v.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+  if (Array.isArray(v)) return `[${v.map(toPyLiteral).join(", ")}]`;
+  if (typeof v === "object")
+    return `{${Object.entries(v)
+      .map(([k, val]) => `${toPyLiteral(String(k))}: ${toPyLiteral(val)}`)
+      .join(", ")}}`;
+  return "None";
+};
+
 const replacePlaceholders = (
   template: string,
   params: Record<string, any>
@@ -13,6 +31,9 @@ const replacePlaceholders = (
       value = "None";
     } else if (typeof value === "boolean") {
       value = value ? "True" : "False"; // Python boolean
+    } else if (typeof value === "object") {
+      // 객체/배열은 Python 리터럴(dict/list)로 변환 — JSON.stringify의 JS 불리언/널 문제 방지
+      value = toPyLiteral(value);
     } else if (typeof value !== "string" || !isNaN(Number(value))) {
       value = JSON.stringify(value);
     } else {
@@ -437,8 +458,8 @@ def normalize_data(df: pd.DataFrame, method: str = 'MinMax', columns: list = Non
     """
     print(f"데이터 정규화 방법: {method}")
     df_normalized = df.copy()
-    
-    if columns is None:
+
+    if not columns:  # None 또는 빈 리스트면 전체 수치형 컬럼을 대상으로 함
         columns = df_normalized.select_dtypes(include=[np.number]).columns.tolist()
     
     if method == 'MinMax':
@@ -1952,7 +1973,7 @@ export const getModuleCode = (
         random_state !== null &&
         random_state !== ""
           ? `p_random_state = ${random_state}`
-          : "# random_state: using default (None)",
+          : "p_random_state = 42  # 재현성 보장을 위한 기본 시드 (모듈 기본값과 동일)",
       split_shuffle:
         shuffle !== undefined && shuffle !== null && shuffle !== ""
           ? `p_shuffle = ${
@@ -1977,11 +1998,8 @@ export const getModuleCode = (
           ? "split_kwargs['train_size'] = p_train_size"
           : "",
       split_random_state_kwarg:
-        random_state !== undefined &&
-        random_state !== null &&
-        random_state !== ""
-          ? "split_kwargs['random_state'] = p_random_state"
-          : "",
+        // 재현성: random_state는 항상 전달한다(미설정 시 기본 시드 42).
+        "split_kwargs['random_state'] = p_random_state",
       split_shuffle_kwarg:
         shuffle !== undefined && shuffle !== null && shuffle !== ""
           ? "split_kwargs['shuffle'] = p_shuffle"

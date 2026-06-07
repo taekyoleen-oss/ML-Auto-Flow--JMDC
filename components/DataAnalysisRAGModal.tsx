@@ -10,6 +10,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { CanvasModule } from '../types';
 import { GoogleGenAI } from '@google/genai';
+import { getGeminiClient } from '../lib/aiClient';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -84,12 +85,7 @@ export const DataAnalysisRAGModal: React.FC<DataAnalysisRAGModalProps> = ({
 
     try {
       // Gemini API 직접 호출
-      const geminiApiKey = process.env.GEMINI_API_KEY || (window as any).GEMINI_API_KEY;
-      if (!geminiApiKey) {
-        throw new Error('GEMINI_API_KEY가 설정되지 않았습니다.');
-      }
-
-      const genAI = new GoogleGenAI({ apiKey: geminiApiKey });
+      const genAI = getGeminiClient();
       
       // 데이터 정보를 포함한 프롬프트 구성
       const prompt = `당신은 데이터 분석 전문가입니다. 다음 데이터 정보를 바탕으로 질문에 답변해주세요.
@@ -151,12 +147,7 @@ ${question}
       const dataInfo = getDataInfo();
 
       // Gemini API 직접 호출
-      const geminiApiKey = process.env.GEMINI_API_KEY || (window as any).GEMINI_API_KEY;
-      if (!geminiApiKey) {
-        throw new Error('GEMINI_API_KEY가 설정되지 않았습니다.');
-      }
-
-      const genAI = new GoogleGenAI({ apiKey: geminiApiKey });
+      const genAI = getGeminiClient();
       
       // 데이터 정보를 포함한 프롬프트 구성
       let prompt = currentInput;

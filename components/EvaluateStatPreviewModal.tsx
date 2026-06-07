@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { CanvasModule, EvaluateStatOutput } from '../types';
 import { XCircleIcon } from './icons';
+import { explainModuleResult } from '../lib/aiHelpers';
+import { ApiKeyMissingError } from '../lib/aiClient';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface EvaluateStatPreviewModalProps {
   module: CanvasModule;
@@ -13,10 +16,49 @@ export const EvaluateStatPreviewModal: React.FC<EvaluateStatPreviewModalProps> =
   projectName,
   onClose,
 }) => {
+  // ✨ AI 해설
+  const [explanation, setExplanation] = useState('');
+  const [isExplaining, setIsExplaining] = useState(false);
+  const [aiError, setAiError] = useState('');
+
   const output = module.outputData as EvaluateStatOutput;
   if (!output || output.type !== 'EvaluateStatOutput') return null;
 
   const { modelType, metrics, residuals, deviance, pearsonChi2, dispersion, aic, bic, logLikelihood } = output;
+
+  // ✨ AI 해설: 통계 평가 지표를 요약하여 explainModuleResult에 전달
+  const handleExplain = async () => {
+    setIsExplaining(true);
+    setAiError('');
+    setExplanation('');
+    try {
+      const metricLines = Object.entries(metrics)
+        .map(([k, v]) => `- ${k}: ${typeof v === 'number' ? v.toFixed(6) : String(v)}`)
+        .join('\n');
+
+      const extra: string[] = [];
+      if (deviance !== undefined) extra.push(`- Deviance: ${deviance.toFixed(6)}`);
+      if (pearsonChi2 !== undefined) extra.push(`- Pearson Chi²: ${pearsonChi2.toFixed(6)}`);
+      if (dispersion !== undefined) extra.push(`- Dispersion(φ): ${dispersion.toFixed(6)}`);
+      if (aic !== undefined) extra.push(`- AIC: ${aic.toFixed(6)}`);
+      if (bic !== undefined) extra.push(`- BIC: ${bic.toFixed(6)}`);
+      if (logLikelihood !== undefined) extra.push(`- Log-Likelihood: ${logLikelihood.toFixed(6)}`);
+
+      const summary = `모델 유형: ${modelType}\n프로젝트: ${projectName}\n\n[지표]\n${metricLines}`
+        + (extra.length ? `\n\n[추가 통계량]\n${extra.join('\n')}` : '');
+
+      const result = await explainModuleResult('EvaluateStat(통계 모델 평가)', summary);
+      setExplanation(result);
+    } catch (err) {
+      if (err instanceof ApiKeyMissingError) {
+        setAiError('Gemini API 키가 필요합니다. 설정(⚙)에서 키를 입력한 뒤 다시 시도하세요.');
+      } else {
+        setAiError(`AI 해설 생성 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } finally {
+      setIsExplaining(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -25,15 +67,40 @@ export const EvaluateStatPreviewModal: React.FC<EvaluateStatPreviewModalProps> =
           <h2 className="text-xl font-bold text-white">
             Evaluate Stat - {module.name}
           </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors"
-          >
-            <XCircleIcon className="w-6 h-6" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExplain}
+              disabled={isExplaining}
+              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors"
+              title="AI가 이 평가 결과를 해설합니다"
+            >
+              <span aria-hidden>✨</span>
+              <span>{isExplaining ? 'AI 분석 중…' : 'AI 해설'}</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              <XCircleIcon className="w-6 h-6" />
+            </button>
+          </div>
         </div>
 
         <div className="overflow-y-auto p-6 flex-1">
+          {/* ✨ AI 해설 패널 */}
+          {(isExplaining || explanation || aiError) && (
+            <div className="mb-6 bg-white text-gray-800 rounded-lg p-4 border border-blue-300">
+              <h3 className="text-md font-bold text-blue-700 mb-2 flex items-center gap-2">
+                <span aria-hidden>✨</span> AI 해설
+              </h3>
+              {isExplaining && (
+                <p className="text-sm text-gray-500 animate-pulse">AI가 평가 결과를 해설하고 있습니다…</p>
+              )}
+              {aiError && <p className="text-sm text-red-600">{aiError}</p>}
+              {explanation && <MarkdownRenderer text={explanation} />}
+            </div>
+          )}
+
           <div className="mb-6">
             <h3 className="text-lg font-semibold text-white mb-4">Model Type: {modelType}</h3>
           </div>

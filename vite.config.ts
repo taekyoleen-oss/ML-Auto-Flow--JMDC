@@ -35,8 +35,11 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY || env.API_KEY || ''),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY || env.API_KEY || '')
+        // 보안: 프로덕션 빌드 번들에는 키를 박지 않는다(빈 문자열).
+        // 개발 모드에서만 .env/.env.local의 키를 dev 폴백으로 주입한다.
+        // 사용자 키는 런타임에 localStorage에서 로드된다(lib/aiClient.ts).
+        'process.env.API_KEY': JSON.stringify(isProduction ? '' : (env.GEMINI_API_KEY || env.API_KEY || '')),
+        'process.env.GEMINI_API_KEY': JSON.stringify(isProduction ? '' : (env.GEMINI_API_KEY || env.API_KEY || ''))
       },
       resolve: {
         alias: {

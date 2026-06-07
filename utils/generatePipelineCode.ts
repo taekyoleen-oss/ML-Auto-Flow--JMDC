@@ -115,6 +115,77 @@ function getExecutionOrder(
 }
 
 /**
+ * 모듈 템플릿에는 실제 실행 호출이 주석 처리되어 있는 경우가 많다
+ * (예: "# selected_data = select_data(dataframe, selected_columns)").
+ * 템플릿은 '표시용'이고 앱은 별도 경로로 실행하기 때문이다.
+ * 전체 파이프라인 코드는 외부 Python에서 그대로 실행되어야 하므로,
+ * 주석 처리된 실행 호출(함수 호출 형태의 대입문)을 활성화한다.
+ *
+ * - 단일 라인 호출: `# var = func(...)` → `var = func(...)`
+ * - 여러 줄에 걸친 호출: `# var = func(` 로 시작해 괄호가 닫힐 때까지 연속된 주석 라인을 함께 활성화
+ * 순수 설명 주석(대입/호출 형태가 아님)은 그대로 둔다.
+ */
+function activateExecutionCalls(code: string): string {
+  const lines = code.split('\n');
+  const out: string[] = [];
+  const startRe = /^(\s*)#\s*([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*\s*=\s*[A-Za-z_][\w.]*\(.*)$/;
+  const countParens = (s: string) => {
+    // 문자열 리터럴을 제외한 괄호 균형 계산(간단 버전)
+    const noStr = s.replace(/'[^']*'|"[^"]*"/g, '');
+    return (noStr.match(/\(/g) || []).length - (noStr.match(/\)/g) || []).length;
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(startRe);
+    if (!m) { out.push(lines[i]); continue; }
+    // 실행 호출(주석) 시작 — 활성화
+    const indent = m[1];
+    let body = m[2];
+    let depth = countParens(body);
+    out.push(indent + body.replace(/\s+$/, ''));
+    // 괄호가 아직 안 닫혔으면 후속 주석 라인을 이어서 활성화
+    while (depth > 0 && i + 1 < lines.length) {
+      const cont = lines[i + 1].match(/^(\s*)#\s?(.*)$/);
+      if (!cont) break;
+      i++;
+      out.push(cont[1] + cont[2].replace(/\s+$/, ''));
+      depth += countParens(cont[2]);
+    }
+  }
+  return out.join('\n');
+}
+
+/**
+ * 전체 파이프라인 코드를 '실행 위주'로 간결화한다.
+ * 설명용 전체-라인 주석(#로 시작)을 제거하되, 함수/실행 코드·docstring·인라인 주석·print는 보존한다.
+ * 삼중따옴표 문자열(docstring) 내부의 #-라인은 제거하지 않는다(실행 의미 보존).
+ * 주석만 제거하므로 실행 결과(동일 결과)는 절대 바뀌지 않는다.
+ */
+function stripCommentsKeepCode(code: string): string {
+  const lines = code.split('\n');
+  const out: string[] = [];
+  let inTriple = false;
+  for (const line of lines) {
+    const tripleCount =
+      (line.match(/"""/g) || []).length + (line.match(/'''/g) || []).length;
+    if (!inTriple) {
+      const trimmed = line.trim();
+      // 문자열 밖의 전체-라인 주석 제거(단, 보존 가치가 있는 헤더 라인 '# ──'는 유지)
+      if (trimmed.startsWith('#') && !trimmed.startsWith('# ──')) {
+        if (tripleCount % 2 === 1) inTriple = true; // 안전장치(주석 라인엔 보통 없음)
+        continue;
+      }
+      out.push(line);
+      if (tripleCount % 2 === 1) inTriple = true;
+    } else {
+      out.push(line);
+      if (tripleCount % 2 === 1) inTriple = false;
+    }
+  }
+  // 빈 줄 3개 이상은 2개로 축약
+  return out.join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
+/**
  * 모듈 타입별 내부 출력 변수명 매핑
  */
 const MODULE_OUTPUT_VAR: Record<string, string> = {
@@ -165,11 +236,7 @@ export function generateFullPipelineCode(
   modules.forEach((m) => moduleMap.set(m.id, m));
 
   const codeLines: string[] = [];
-  codeLines.push('# ============================================================================');
-  codeLines.push('# 전체 파이프라인 실행 코드');
-  codeLines.push('# 이 코드는 Jupyter Notebook, Python 스크립트 등 외부 환경에서도 실행 가능합니다.');
-  codeLines.push('# ============================================================================');
-  codeLines.push('');
+  codeLines.push('# 전체 파이프라인 실행 코드 (외부 Python에서 그대로 실행 가능 · 동일 결과 재현)');
   codeLines.push('import pandas as pd');
   codeLines.push('import numpy as np');
   codeLines.push('');
@@ -177,12 +244,8 @@ export function generateFullPipelineCode(
   const variableMap = new Map<string, string>(); // moduleId -> outputVarName
 
   executionOrder.forEach((module, index) => {
-    // ── 모듈 섹션 헤더 ──────────────────────────────────────────────────────
-    codeLines.push('# ============================================================================');
-    codeLines.push(`# [모듈 ${index + 1}/${executionOrder.length}] ${module.name}`);
-    codeLines.push(`# 타입: ${module.type}`);
-    codeLines.push('# ============================================================================');
-    codeLines.push('');
+    // ── 모듈 섹션 헤더 (간결: 1줄, stripCommentsKeepCode가 보존하는 '# ──' 접두사 사용) ──
+    codeLines.push(`# ── [${index + 1}/${executionOrder.length}] ${module.name} (${module.type}) ──`);
 
     // ── 모듈 코드 생성 ──────────────────────────────────────────────────────
     let moduleCode: string;
@@ -191,7 +254,7 @@ export function generateFullPipelineCode(
       moduleCode = generateLoadDataInjectionCode(module);
     } else {
       try {
-        moduleCode = getModuleCode(module, modules, connections);
+        moduleCode = activateExecutionCalls(getModuleCode(module, modules, connections));
       } catch (e: any) {
         // 코드 생성 실패 시 주석으로 숨기지 않고 Python 실행 시점에 명확한 에러 발생
         const errMsg = e?.message || String(e);
@@ -229,8 +292,13 @@ export function generateFullPipelineCode(
 
     inputConnections.forEach((conn) => {
       const fromModule = moduleMap.get(conn.from.moduleId);
-      const prevVarName = variableMap.get(conn.from.moduleId);
+      let prevVarName = variableMap.get(conn.from.moduleId);
       if (!prevVarName || !fromModule) return;
+      // SplitData는 train/test 두 출력을 가지므로 연결된 포트에 맞춰 변수를 선택한다.
+      // (기존 버그: 항상 train을 사용해 test_data_out 연결도 train 데이터를 잘못 참조)
+      if (fromModule.type === 'SplitData') {
+        prevVarName = `${prevVarName}_${conn.from.portName === 'test_data_out' ? 'test' : 'train'}`;
+      }
 
       const toPort = conn.to.portName;
       const fromLabel = fromModule.name;
@@ -272,12 +340,12 @@ export function generateFullPipelineCode(
 
     // 입력 연결이 있으면 모듈 코드 앞에 주입
     if (inputPrefixLines.length > 0) {
-      codeLines.push('# 이전 모듈 출력을 입력으로 받음');
       inputPrefixLines.forEach((line) => codeLines.push(line));
       codeLines.push('');
     }
 
-    codeLines.push(moduleCode);
+    // 전체코드는 '실행 위주'로 — 설명용 주석을 제거(실행 결과 불변)
+    codeLines.push(stripCommentsKeepCode(moduleCode));
 
     // ── 출력 변수 명시적 할당 ───────────────────────────────────────────────
     if (outputVarName) {
@@ -285,7 +353,10 @@ export function generateFullPipelineCode(
         codeLines.push(`${outputVarName}_train = train_data`);
         codeLines.push(`${outputVarName}_test = test_data`);
       } else {
-        const internalVar = MODULE_OUTPUT_VAR[module.type] || '';
+        let internalVar = MODULE_OUTPUT_VAR[module.type] || '';
+        // 매핑되지 않은 모델 생성 모듈(LinearRegression/DecisionTree/NeuralNetwork 등)은
+        // 템플릿이 일관되게 'model' 변수를 만든다 → 출력 타입이 model이면 'model'로 폴백
+        if (!internalVar && module.outputs[0]?.type === 'model') internalVar = 'model';
         if (internalVar) {
           codeLines.push(`${outputVarName} = ${internalVar}`);
         }
@@ -316,17 +387,12 @@ export function generateFullPipelineCode(
 
     // 출력 변수명을 다음 모듈을 위해 저장
     if (outputVarName) {
+      // SplitData는 base 변수명을 저장하고, 연결 포트에 따라 _train/_test를 위 wiring에서 부여한다.
       variableMap.set(module.id, outputVarName);
-      // SplitData는 train/test 쌍으로 저장 (data_in 연결 시 train을 기본값으로 사용)
-      if (module.type === 'SplitData') {
-        variableMap.set(module.id, `${outputVarName}_train`);
-      }
     }
   });
 
-  codeLines.push('# ============================================================================');
-  codeLines.push('# 파이프라인 실행 완료');
-  codeLines.push('# ============================================================================');
+  codeLines.push('# ── 파이프라인 실행 완료 ──');
 
   return codeLines.join('\n');
 }

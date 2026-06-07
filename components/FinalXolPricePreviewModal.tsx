@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CanvasModule, FinalXolPriceOutput } from '../types';
 import { XCircleIcon, SparklesIcon } from './icons';
 import { GoogleGenAI } from "@google/genai";
+import { getGeminiClient } from '../lib/aiClient';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface FinalXolPricePreviewModalProps {
@@ -31,7 +32,7 @@ export const FinalXolPricePreviewModal: React.FC<FinalXolPricePreviewModalProps>
         setIsInterpreting(true);
         setAiInterpretation(null);
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+            const ai = getGeminiClient();
             const prompt = `
 You are a senior actuary creating a concise premium breakdown report. Use Korean and simple Markdown.
 

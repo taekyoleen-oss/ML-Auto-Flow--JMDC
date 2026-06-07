@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { CanvasModule, StatisticsOutput } from '../types';
 import { XCircleIcon, SparklesIcon, ArrowDownTrayIcon } from './icons';
 import { GoogleGenAI } from "@google/genai";
+import { getGeminiClient, ApiKeyMissingError } from '../lib/aiClient';
+import { explainModuleResult } from '../lib/aiHelpers';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { SpreadViewModal } from './SpreadViewModal';
 
@@ -228,6 +230,10 @@ export const StatisticsPreviewModal: React.FC<StatisticsPreviewModalProps> = ({ 
     const [isInterpreting, setIsInterpreting] = useState(false);
     const [aiInterpretation, setAiInterpretation] = useState<string | null>(null);
     const [showSpreadView, setShowSpreadView] = useState(false);
+    // ✨ AI 해설 (explainModuleResult 기반)
+    const [explanation, setExplanation] = useState('');
+    const [isExplaining, setIsExplaining] = useState(false);
+    const [aiError, setAiError] = useState('');
 
     const output = module.outputData as StatisticsOutput;
     const hasValidOutput = output && output.type === 'StatisticsOutput';
@@ -297,7 +303,7 @@ export const StatisticsPreviewModal: React.FC<StatisticsPreviewModalProps> = ({ 
         setIsInterpreting(true);
         setAiInterpretation(null);
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+            const ai = getGeminiClient();
 
             const statsText = Object.entries(stats).map(([col, data]) => 
                 `- ${col}: Mean=${data.mean?.toFixed(2)}, StdDev=${data.std?.toFixed(2)}, Min=${data.min?.toFixed(2)}, Max=${data.max?.toFixed(2)}`
@@ -346,6 +352,41 @@ ${correlationText}
         }
     };
 
+    // ✨ AI 해설: 통계 결과를 간결한 텍스트 요약으로 만들어 explainModuleResult에 전달
+    const handleExplain = async () => {
+        setIsExplaining(true);
+        setAiError('');
+        setExplanation('');
+        try {
+            const statsLines = stats
+                ? Object.entries(stats).map(([col, data]: [string, any]) =>
+                    `- ${col}: mean=${data.mean ?? 'N/A'}, std=${data.std ?? 'N/A'}, min=${data.min ?? 'N/A'}, max=${data.max ?? 'N/A'}, median=${data['50%'] ?? 'N/A'}, nulls=${data.nulls ?? 0}, skew=${data.skewness ?? 'N/A'}`
+                ).join('\n')
+                : '(통계 없음)';
+
+            const corrLines = correlation
+                ? Object.entries(correlation)
+                    .flatMap(([c1, inner]) =>
+                        Object.entries(inner)
+                            .filter(([c2, v]) => c1 < c2 && Math.abs(v as number) > 0.5)
+                            .map(([c2, v]) => `- ${c1} ↔ ${c2}: ${(v as number).toFixed(2)}`)
+                    ).join('\n') || '(강한 상관관계 없음)'
+                : '(상관관계 없음)';
+
+            const summary = `프로젝트: ${projectName}\n\n[기술 통계량]\n${statsLines}\n\n[강한 상관관계 (|r|>0.5)]\n${corrLines}`;
+            const result = await explainModuleResult('Statistics(기술통계/상관분석)', summary);
+            setExplanation(result);
+        } catch (err) {
+            if (err instanceof ApiKeyMissingError) {
+                setAiError('Gemini API 키가 필요합니다. 설정(⚙)에서 키를 입력한 뒤 다시 시도하세요.');
+            } else {
+                setAiError(`AI 해설 생성 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`);
+            }
+        } finally {
+            setIsExplaining(false);
+        }
+    };
+
     return (
         <div 
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
@@ -358,6 +399,15 @@ ${correlationText}
                 <header className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
                     <h2 className="text-xl font-bold text-gray-800">Statistics Preview: {module.name}</h2>
                     <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleExplain}
+                            disabled={isExplaining}
+                            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                            title="AI가 이 통계 결과를 해설합니다"
+                        >
+                            <span aria-hidden>✨</span>
+                            <span>{isExplaining ? 'AI 분석 중…' : 'AI 해설'}</span>
+                        </button>
                         <button
                             onClick={() => setShowSpreadView(true)}
                             className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center gap-1"
@@ -419,6 +469,20 @@ ${correlationText}
                                 AI 분석 요약
                             </h3>
                             <MarkdownRenderer text={aiInterpretation} />
+                        </div>
+                    )}
+
+                    {/* ✨ AI 해설 패널 (explainModuleResult) */}
+                    {(isExplaining || explanation || aiError) && (
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                            <h3 className="text-lg font-bold text-blue-800 mb-2 font-sans flex items-center gap-2">
+                                <span aria-hidden>✨</span> AI 해설
+                            </h3>
+                            {isExplaining && (
+                                <p className="text-sm text-gray-500 animate-pulse">AI가 통계 결과를 해설하고 있습니다…</p>
+                            )}
+                            {aiError && <p className="text-sm text-red-600">{aiError}</p>}
+                            {explanation && <MarkdownRenderer text={explanation} />}
                         </div>
                     )}
 
