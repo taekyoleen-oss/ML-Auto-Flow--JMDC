@@ -39,6 +39,21 @@ type SortConfig = {
   direction: "ascending" | "descending";
 } | null;
 
+// 컬럼 dtype이 수치형인지 판정한다. pyodide가 컬럼 type에 pandas dtype 문자열
+// ('int64'/'float64'/'object' 등)을 넣으므로 '=== "number"'로는 매칭되지 않는다.
+// (App.tsx 등 다른 경로와 동일하게 startsWith로 판정 + 정규화된 'number'도 허용.)
+const isNumericType = (t?: string): boolean => {
+  if (!t) return false;
+  const s = t.toLowerCase();
+  return (
+    s === "number" ||
+    s.startsWith("int") ||
+    s.startsWith("float") ||
+    s.startsWith("uint") ||
+    s.startsWith("double")
+  );
+};
+
 // Statistics 모듈의 CorrelationHeatmap 컴포넌트 (Load Data 모듈용)
 const CorrelationHeatmap: React.FC<{
   matrix: Record<string, Record<string, number>>;
@@ -1983,7 +1998,7 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
   ]);
     
   const isSelectedColNumeric = useMemo(
-    () => selectedColInfo?.type === "number",
+    () => isNumericType(selectedColInfo?.type),
     [selectedColInfo]
   );
     
@@ -1999,7 +2014,7 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
       }
       if (!Array.isArray(colsToUse)) return [];
       return colsToUse
-        .filter((c) => c && c.type === "number")
+        .filter((c) => c && isNumericType(c.type))
         .map((c) => c.name)
         .filter(Boolean);
         } catch (error) {
@@ -2713,7 +2728,7 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
                               ? currentColumns
                               : columns
                             ).map((col) => {
-                              const isNumberColumn = col.type === "number";
+                              const isNumberColumn = isNumericType(col.type);
                               const alignClass = isNumberColumn
                                 ? "text-right"
                                 : "text-left";
@@ -2789,7 +2804,7 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
                                   ? currentColumns
                                   : columns
                                 ).map((col) => {
-                                  const isNumberColumn = col.type === "number";
+                                  const isNumberColumn = isNumericType(col.type);
                                   const alignClass = isNumberColumn
                                     ? "text-right"
                                     : "text-left";
