@@ -39,7 +39,19 @@ export default defineConfig(({ mode }) => {
         // 개발 모드에서만 .env/.env.local의 키를 dev 폴백으로 주입한다.
         // 사용자 키는 런타임에 localStorage에서 로드된다(lib/aiClient.ts).
         'process.env.API_KEY': JSON.stringify(isProduction ? '' : (env.GEMINI_API_KEY || env.API_KEY || '')),
-        'process.env.GEMINI_API_KEY': JSON.stringify(isProduction ? '' : (env.GEMINI_API_KEY || env.API_KEY || ''))
+        'process.env.GEMINI_API_KEY': JSON.stringify(isProduction ? '' : (env.GEMINI_API_KEY || env.API_KEY || '')),
+        // 고급기능 비밀번호 검증값(비밀번호의 SHA-256 hex 권장, 평문도 허용되나 번들 노출).
+        // Vercel/로컬 환경변수에서 빌드 시 주입. 변수명: ADVANCED_PASSWORD_HASH
+        // 또는 VITE_ADVANCED_PASSWORD_HASH / NEXT_PUBLIC_ADVANCED_PASSWORD_HASH 모두 허용.
+        '__ADVANCED_PASSWORD_HASH__': JSON.stringify(
+          process.env.ADVANCED_PASSWORD_HASH
+          || process.env.VITE_ADVANCED_PASSWORD_HASH
+          || process.env.NEXT_PUBLIC_ADVANCED_PASSWORD_HASH
+          || env.ADVANCED_PASSWORD_HASH
+          || env.VITE_ADVANCED_PASSWORD_HASH
+          || env.NEXT_PUBLIC_ADVANCED_PASSWORD_HASH
+          || ''
+        )
       },
       resolve: {
         alias: {

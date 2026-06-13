@@ -13,9 +13,14 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
  * (단순 `=true` 조작 방지). 결정적인 우회를 막는 강한 보안은 아니다.
  */
 
-// 고급기능 비밀번호의 SHA-256 해시(소문자 hex). 사용자가 지정한 비밀번호로부터 계산하여 채운다.
-// 비어 있으면 어떤 비밀번호로도 해제되지 않는다(안전한 기본값).
-export const ADVANCED_PASSWORD_HASH = '';
+// vite.config의 define으로 빌드 시 주입되는 값(Vercel/로컬 환경변수).
+declare const __ADVANCED_PASSWORD_HASH__: string;
+
+// 고급기능 비밀번호 검증값. 환경변수 ADVANCED_PASSWORD_HASH(또는 VITE_/NEXT_PUBLIC_ 접두어)에서
+// 빌드 시 주입된다. 값은 비밀번호의 SHA-256 hex 해시를 권장한다(평문도 허용되나 번들에 노출됨).
+// 비어 있으면(미설정) 어떤 비밀번호로도 해제되지 않는다(안전한 기본값).
+export const ADVANCED_PASSWORD_HASH =
+  (typeof __ADVANCED_PASSWORD_HASH__ !== 'undefined' ? __ADVANCED_PASSWORD_HASH__ : '').trim();
 
 const STORAGE_KEY = 'mlaf_advanced_unlocked';
 
@@ -53,7 +58,9 @@ export const AdvancedFeatureProvider: React.FC<{ children: React.ReactNode }> = 
   const unlock = useCallback(async (password: string): Promise<boolean> => {
     if (!ADVANCED_PASSWORD_HASH) return false;
     const hashed = await sha256Hex(password);
-    if (hashed === ADVANCED_PASSWORD_HASH) {
+    // 환경변수가 SHA-256 해시면 hashed와, 평문 비밀번호면 password와 직접 일치하면 통과.
+    const ok = hashed === ADVANCED_PASSWORD_HASH.toLowerCase() || password === ADVANCED_PASSWORD_HASH;
+    if (ok) {
       setIsUnlocked(true);
       try {
         localStorage.setItem(STORAGE_KEY, ADVANCED_PASSWORD_HASH);
