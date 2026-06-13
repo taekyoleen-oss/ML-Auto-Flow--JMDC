@@ -5,6 +5,7 @@ import { GoogleGenAI } from "@google/genai";
 import { getGeminiClient, ApiKeyMissingError } from '../lib/aiClient';
 import { explainModuleResult } from '../lib/aiHelpers';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
 import { SpreadViewModal } from './SpreadViewModal';
 
 // C-3: 컬럼별 분포 미니 시각화 컴포넌트
@@ -399,15 +400,18 @@ ${correlationText}
                 <header className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
                     <h2 className="text-xl font-bold text-gray-800">Statistics Preview: {module.name}</h2>
                     <div className="flex items-center gap-2">
+                        <AdvancedOnly>
                         <button
                             onClick={handleExplain}
                             disabled={isExplaining}
-                            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                            className={`px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${ADVANCED_BTN_DIM}`}
                             title="AI가 이 통계 결과를 해설합니다"
                         >
+                            <AdvancedLockBadge />
                             <span aria-hidden>✨</span>
                             <span>{isExplaining ? 'AI 분석 중…' : 'AI 해설'}</span>
                         </button>
+                        </AdvancedOnly>
                         <button
                             onClick={() => setShowSpreadView(true)}
                             className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center gap-1"
@@ -451,14 +455,17 @@ ${correlationText}
                 </header>
                 <main className="flex-grow p-4 overflow-auto flex flex-col gap-6">
                     <div className="flex justify-end font-sans">
+                        <AdvancedOnly>
                         <button
                             onClick={handleInterpret}
                             disabled={isInterpreting}
-                            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:bg-purple-400 disabled:cursor-wait transition-colors"
+                            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:bg-purple-400 disabled:cursor-wait transition-colors ${ADVANCED_BTN_DIM}`}
                         >
+                            <AdvancedLockBadge />
                             <SparklesIcon className="w-5 h-5" />
                             {isInterpreting ? '분석 중...' : 'AI로 결과 해석하기'}
                         </button>
+                        </AdvancedOnly>
                     </div>
 
                     {isInterpreting && <div className="text-center p-4 text-gray-600">AI가 통계 결과를 분석하고 있습니다...</div>}

@@ -36,6 +36,7 @@ import {
   ArrowDownTrayIcon,
 } from "./icons";
 import { getModuleCode } from "../codeSnippets";
+import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from "../contexts/AdvancedFeatureContext";
 // Examples_in_Load 디렉토리에서 예제 데이터를 로드하는 함수는 아래에서 정의
 import { GoogleGenAI, Type } from "@google/genai";
 import { getGeminiClient } from '../lib/aiClient';
@@ -259,12 +260,14 @@ ${optionsContext}
   };
 
   return (
+    <AdvancedOnly>
     <div className="mt-4 border-t border-gray-700 pt-3">
       <button
         onClick={handleExplain}
         disabled={isLoading}
-        className="flex items-center justify-center gap-2 w-full px-3 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 rounded-md font-semibold text-white transition-colors"
+        className={`flex items-center justify-center gap-2 w-full px-3 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 rounded-md font-semibold text-white transition-colors ${ADVANCED_BTN_DIM}`}
       >
+        <AdvancedLockBadge />
         <SparklesIcon className="h-4 w-4" />
         {isLoading
           ? "생성 중..."
@@ -283,6 +286,7 @@ ${optionsContext}
         </div>
       )}
     </div>
+    </AdvancedOnly>
   );
 };
 
@@ -361,16 +365,19 @@ You are an expert data scientist AI assistant. Your task is to recommend the opt
   };
 
   return (
+    <AdvancedOnly>
     <div className="mb-4">
       <button
         onClick={handleRecommend}
         disabled={isLoading}
-        className="flex items-center justify-center gap-2 w-full px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 rounded-md font-semibold text-white transition-colors"
+        className={`flex items-center justify-center gap-2 w-full px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 rounded-md font-semibold text-white transition-colors ${ADVANCED_BTN_DIM}`}
       >
+        <AdvancedLockBadge />
         <SparklesIcon className="h-4 w-4" />
         {isLoading ? "분석 중..." : "AI 추천"}
       </button>
     </div>
+    </AdvancedOnly>
   );
 };
 
@@ -807,15 +814,18 @@ const renderParameters = (
           >
             엑셀 데이터 직접 입력
           </button>
+          <AdvancedOnly>
           <div className="mt-4">
             <button
               onClick={() => onOpenRAGModal?.()}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm bg-purple-600 hover:bg-purple-700 rounded-md font-semibold text-white transition-colors"
+              className={`w-full flex items-center justify-center gap-2 px-3 py-2 text-sm bg-purple-600 hover:bg-purple-700 rounded-md font-semibold text-white transition-colors ${ADVANCED_BTN_DIM}`}
             >
+              <AdvancedLockBadge />
               <SparklesIcon className="h-4 w-4" />
               AI로 데이터 사전 분석하기
             </button>
           </div>
+          </AdvancedOnly>
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-xs text-gray-500 uppercase font-bold">
@@ -5864,16 +5874,19 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               >
                 미리보기
               </button>
+              <AdvancedOnly>
               <button
                 onClick={() => setActiveTab("code")}
-                className={`flex-1 flex items-center justify-center p-3 text-xs font-semibold ${
+                className={`flex-1 flex items-center justify-center gap-1 p-3 text-xs font-semibold ${ADVANCED_BTN_DIM} ${
                   activeTab === "code"
                     ? "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white"
                     : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50"
                 }`}
               >
+                <AdvancedLockBadge />
                 코드
               </button>
+              </AdvancedOnly>
               <button
                 onClick={() => setActiveTab("terminal")}
                 className={`flex-1 flex items-center justify-center p-3 text-xs font-semibold ${
@@ -5977,6 +5990,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 </div>
               )}
               {activeTab === "code" && (
+                <AdvancedOnly>
                 <div>
                   <div className="relative bg-gray-100 dark:bg-gray-900 rounded-lg">
                     <button
@@ -5995,6 +6009,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     </pre>
                   </div>
                 </div>
+                </AdvancedOnly>
               )}
               {activeTab === "terminal" && (
                 <div

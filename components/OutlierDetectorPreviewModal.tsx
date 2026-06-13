@@ -4,6 +4,7 @@ import { XCircleIcon, CheckIcon } from './icons';
 import { ApiKeyMissingError } from '../lib/aiClient';
 import { explainModuleResult } from '../lib/aiHelpers';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
 
 interface OutlierDetectorPreviewModalProps {
     module: CanvasModule;
@@ -162,15 +163,18 @@ export const OutlierDetectorPreviewModal: React.FC<OutlierDetectorPreviewModalPr
                     <h2 className="text-xl font-bold text-gray-800">Outlier Detection: {module.name}</h2>
                     <div className="flex items-center gap-2">
                         {columnResults.length > 0 && (
+                            <AdvancedOnly>
                             <button
                                 onClick={handleExplain}
                                 disabled={isExplaining}
-                                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                                className={`px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${ADVANCED_BTN_DIM}`}
                                 title="AI가 이 이상치 탐지 결과를 해설합니다"
                             >
+                                <AdvancedLockBadge />
                                 <span aria-hidden>✨</span>
                                 <span>{isExplaining ? 'AI 분석 중…' : 'AI 해설'}</span>
                             </button>
+                            </AdvancedOnly>
                         )}
                         <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
                             <XCircleIcon className="w-6 h-6" />

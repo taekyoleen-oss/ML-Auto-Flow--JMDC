@@ -3,6 +3,7 @@ import { XCircleIcon, CodeBracketIcon, ClipboardIcon, CheckIcon } from './icons'
 import { streamExplainPythonCode } from '../lib/aiHelpers';
 import { ApiKeyMissingError } from '../lib/aiClient';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
 
 interface PipelineCodeModalProps {
     isOpen: boolean;
@@ -79,15 +80,18 @@ export const PipelineCodeModal: React.FC<PipelineCodeModalProps> = ({ isOpen, on
                         전체 파이프라인 코드
                     </h2>
                     <div className="flex items-center gap-2">
+                        <AdvancedOnly>
                         <button
                             onClick={handleExplain}
                             disabled={isExplaining}
-                            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-colors"
+                            className={`flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-colors ${ADVANCED_BTN_DIM}`}
                             title="AI가 이 Python 코드를 설명합니다"
                         >
+                            <AdvancedLockBadge />
                             <span aria-hidden>✨</span>
                             <span>{isExplaining ? 'AI 분석 중…' : 'AI 설명'}</span>
                         </button>
+                        </AdvancedOnly>
                         <button
                             onClick={handleCopy}
                             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded-md transition-colors"

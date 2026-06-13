@@ -4,6 +4,7 @@ import { XCircleIcon, SparklesIcon, ArrowDownTrayIcon } from './icons';
 import { GoogleGenAI } from "@google/genai";
 import { getGeminiClient } from '../lib/aiClient';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
 import { SpreadViewModal } from './SpreadViewModal';
 
 type SortConfig = {
@@ -318,14 +319,17 @@ You are an ML educator. Please explain the following concepts in Korean, each in
                 </header>
                 <main className="flex-grow p-4 overflow-hidden flex flex-col">
                      <div className="flex justify-end font-sans mb-4 flex-shrink-0">
+                        <AdvancedOnly>
                         <button
                             onClick={handleInterpret}
                             disabled={isInterpreting}
-                            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:bg-purple-400 disabled:cursor-wait transition-colors"
+                            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:bg-purple-400 disabled:cursor-wait transition-colors ${ADVANCED_BTN_DIM}`}
                         >
+                            <AdvancedLockBadge />
                             <SparklesIcon className="w-5 h-5" />
                             {isInterpreting ? '분석 중...' : 'AI로 결과 해석하기'}
                         </button>
+                        </AdvancedOnly>
                     </div>
 
                     {isInterpreting && <div className="text-center p-4 text-gray-600 flex-shrink-0">AI가 데이터 분할의 의미를 분석하고 있습니다...</div>}

@@ -4,6 +4,7 @@ import { XCircleIcon } from './icons';
 import { explainModuleResult } from '../lib/aiHelpers';
 import { ApiKeyMissingError } from '../lib/aiClient';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
 
 // C-1: 인터랙티브 메트릭 바 차트
 const MetricBarChart: React.FC<{ metrics: Record<string, number | string>; modelType: 'classification' | 'regression' }> = ({ metrics, modelType }) => {
@@ -386,15 +387,18 @@ export const EvaluationPreviewModal: React.FC<EvaluationPreviewModalProps> = ({
                         <p className="text-sm text-gray-500">Model Type: <span className="capitalize">{modelType}</span></p>
                     </div>
                     <div className="flex items-center gap-2">
+                        <AdvancedOnly>
                         <button
                             onClick={handleExplain}
                             disabled={isExplaining}
-                            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                            className={`px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${ADVANCED_BTN_DIM}`}
                             title="AI가 이 평가 결과를 해설합니다"
                         >
+                            <AdvancedLockBadge />
                             <span aria-hidden>✨</span>
                             <span>{isExplaining ? 'AI 분석 중…' : 'AI 해설'}</span>
                         </button>
+                        </AdvancedOnly>
                         <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
                             <XCircleIcon className="w-6 h-6" />
                         </button>

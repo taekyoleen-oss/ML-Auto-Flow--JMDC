@@ -4,6 +4,7 @@ import { XCircleIcon, SparklesIcon } from "./icons";
 import { GoogleGenAI } from "@google/genai";
 import { getGeminiClient } from '../lib/aiClient';
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
 
 interface DiversionCheckerPreviewModalProps {
   module: CanvasModule;
@@ -138,14 +139,17 @@ ${aicComparison ? `- AIC 비교: ${aicComparison}` : ""}
         </header>
         <main className="flex-grow p-4 overflow-auto text-sm">
           <div className="flex justify-end mb-4 font-sans">
+            <AdvancedOnly>
             <button
               onClick={handleInterpret}
               disabled={isInterpreting}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:bg-purple-400 disabled:cursor-wait transition-colors"
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:bg-purple-400 disabled:cursor-wait transition-colors ${ADVANCED_BTN_DIM}`}
             >
+              <AdvancedLockBadge />
               <SparklesIcon className="w-5 h-5" />
               {isInterpreting ? "분석 중..." : "AI로 결과 해석하기"}
             </button>
+            </AdvancedOnly>
           </div>
 
           {/* 통계량 섹션 */}

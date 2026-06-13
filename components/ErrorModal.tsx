@@ -3,6 +3,7 @@ import { XCircleIcon } from './icons';
 import { streamSuggestErrorFix } from '../lib/aiHelpers';
 import { ApiKeyMissingError } from '../lib/aiClient';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
 
 interface ErrorModalProps {
   error: {
@@ -122,15 +123,18 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({ error, onClose }) => {
           </div>
         </main>
         <footer className="flex items-center justify-end gap-2 p-4 border-t border-gray-200 flex-shrink-0">
+          <AdvancedOnly>
           <button
             onClick={handleAnalyze}
             disabled={isAnalyzing}
-            className="mr-auto px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className={`mr-auto px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${ADVANCED_BTN_DIM}`}
             title="AI가 이 오류의 원인과 해결 방법을 분석합니다"
           >
+            <AdvancedLockBadge />
             <span aria-hidden>✨</span>
             <span>{isAnalyzing ? 'AI 분석 중…' : 'AI 원인 분석'}</span>
           </button>
+          </AdvancedOnly>
           <button
             onClick={handleCopy}
             className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 flex items-center gap-2"

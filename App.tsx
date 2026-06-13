@@ -128,6 +128,8 @@ import { SamplesManagementModal } from "./components/SamplesManagementModal";
 import { GoogleGenAI, Type } from "@google/genai";
 import { getGeminiClient, OPEN_API_KEY_SETTINGS_EVENT } from './lib/aiClient';
 import { ApiKeySettingsModal } from "./components/ApiKeySettingsModal";
+import { AdvancedUnlockModal } from "./components/AdvancedUnlockModal";
+import { useAdvancedFeature, ADVANCED_BTN_DIM, AdvancedLockBadge } from "./contexts/AdvancedFeatureContext";
 import { savePipeline, loadPipeline } from "./utils/fileOperations";
 import { setPyodideStatusCallback } from "./utils/pyodideRunner";
 import { classifyPythonError, validateModuleParameters, validateModuleConnections } from "./utils/pipelineValidation";
@@ -257,6 +259,9 @@ const App: React.FC = () => {
   const [runHistory, setRunHistory] = useState<RunHistorySession[]>([]);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+  // 고급기능(AI·PPT·코드·API) 잠금 게이트
+  const { isUnlocked: isAdvancedUnlocked } = useAdvancedFeature();
+  const [isAdvancedModalOpen, setIsAdvancedModalOpen] = useState(false);
   // AI 호출부에서 키가 없을 때 자동으로 설정 모달을 연다.
   useEffect(() => {
     const open = () => setIsApiKeyModalOpen(true);
@@ -11036,13 +11041,16 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
           >
             ?
           </button>
+          {isAdvancedUnlocked && (
           <button
             onClick={() => setIsApiKeyModalOpen(true)}
-            className="p-1.5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors flex-shrink-0 text-sm"
-            title="AI 설정 (Gemini API 키)"
+            className={`flex items-center gap-0.5 p-1.5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors flex-shrink-0 text-sm ${ADVANCED_BTN_DIM}`}
+            title="AI 설정 (Gemini API 키) (고급기능)"
           >
+            <AdvancedLockBadge className="text-[10px] leading-none" />
             ⚙
           </button>
+          )}
           <div className="h-5 border-l border-gray-700"></div>
           <button
             onClick={handleShareLink}
@@ -11462,6 +11470,21 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
             </div>
           </div>
           <div className="flex items-center gap-1 md:gap-2 ml-auto">
+            {/* 고급기능 실행/해제 버튼 (항상 표시) */}
+            <button
+              onClick={() => setIsAdvancedModalOpen(true)}
+              className={`flex items-center gap-1 md:gap-2 px-1.5 md:px-2 py-0.5 md:py-1 text-[7px] md:text-xs rounded-md font-bold transition-colors flex-shrink-0 ${
+                isAdvancedUnlocked
+                  ? "bg-green-600 hover:bg-green-700 text-white"
+                  : "bg-amber-500 hover:bg-amber-600 text-white"
+              }`}
+              title={isAdvancedUnlocked ? "고급기능 해제됨 (클릭하여 관리)" : "고급기능 실행 (비밀번호 필요)"}
+            >
+              <span aria-hidden>{isAdvancedUnlocked ? "🔓" : "🔒"}</span>
+              <span className="whitespace-nowrap">
+                {isAdvancedUnlocked ? "고급기능 해제됨" : "고급기능 실행"}
+              </span>
+            </button>
             {runHistory.length > 0 && (
               <button
                 onClick={() => setShowRunHistory(true)}
@@ -11473,22 +11496,26 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
                 <span className="bg-blue-500 text-white text-[4px] md:text-[8px] rounded-full px-0.5 md:px-1 leading-tight">{runHistory.length}</span>
               </button>
             )}
+            {isAdvancedUnlocked && (
+            <>
             <button
               onClick={() => setIsCodePanelVisible((v) => {
                 if (!v) setIsRightPanelVisible(false); // 코드 패널 열면 속성 패널 닫기
                 return !v;
               })}
-              className="flex items-center gap-1 md:gap-2 px-1.5 md:px-2 py-0.5 md:py-1 text-[5px] md:text-[8px] bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-900 dark:text-white rounded-md font-semibold transition-colors flex-shrink-0"
-              title="전체 파이프라인 코드 보기"
+              className={`flex items-center gap-1 md:gap-2 px-1.5 md:px-2 py-0.5 md:py-1 text-[5px] md:text-[8px] bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-900 dark:text-white rounded-md font-semibold transition-colors flex-shrink-0 ${ADVANCED_BTN_DIM}`}
+              title="전체 파이프라인 코드 보기 (고급기능)"
             >
+              <AdvancedLockBadge className="text-[6px] md:text-[9px] leading-none" />
               <CodeBracketIcon className="h-1.5 w-1.5 md:h-2.5 md:w-2.5" />
               <span className="whitespace-nowrap">전체 코드</span>
             </button>
             <button
               onClick={() => setIsGoalModalOpen(true)}
-              className="flex items-center gap-1 md:gap-2 px-1.5 md:px-2 py-0.5 md:py-1 text-[5px] md:text-[8px] bg-purple-600 dark:bg-purple-600 hover:bg-purple-700 dark:hover:bg-purple-700 text-white rounded-md font-semibold transition-colors flex-shrink-0"
-              title="목표로부터 파이프라인 자동 생성"
+              className={`flex items-center gap-1 md:gap-2 px-1.5 md:px-2 py-0.5 md:py-1 text-[5px] md:text-[8px] bg-purple-600 dark:bg-purple-600 hover:bg-purple-700 dark:hover:bg-purple-700 text-white rounded-md font-semibold transition-colors flex-shrink-0 ${ADVANCED_BTN_DIM}`}
+              title="목표로부터 파이프라인 자동 생성 (고급기능)"
             >
+              <AdvancedLockBadge className="text-[6px] md:text-[9px] leading-none" />
               <SparklesIcon className="h-1.5 w-1.5 md:h-2.5 md:w-2.5" />
               <span className="whitespace-nowrap">
                 AI로 파이프라인 생성하기
@@ -11496,9 +11523,10 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
             </button>
             <button
               onClick={() => setIsDataModalOpen(true)}
-              className="flex items-center gap-1 md:gap-2 px-1.5 md:px-2 py-0.5 md:py-1 text-[5px] md:text-[8px] bg-indigo-600 dark:bg-indigo-600 hover:bg-indigo-700 dark:hover:bg-indigo-700 text-white rounded-md font-semibold transition-colors flex-shrink-0"
-              title="데이터로부터 파이프라인 자동 생성"
+              className={`flex items-center gap-1 md:gap-2 px-1.5 md:px-2 py-0.5 md:py-1 text-[5px] md:text-[8px] bg-indigo-600 dark:bg-indigo-600 hover:bg-indigo-700 dark:hover:bg-indigo-700 text-white rounded-md font-semibold transition-colors flex-shrink-0 ${ADVANCED_BTN_DIM}`}
+              title="데이터로부터 파이프라인 자동 생성 (고급기능)"
             >
+              <AdvancedLockBadge className="text-[6px] md:text-[9px] leading-none" />
               <SparklesIcon className="h-1.5 w-1.5 md:h-2.5 md:w-2.5" />
               <span className="whitespace-nowrap">
                 AI로 데이터 분석 실행하기
@@ -11511,9 +11539,10 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
                 isGeneratingPPTs || modules.length === 0
                   ? "bg-gray-300 dark:bg-gray-600 cursor-not-allowed opacity-50"
                   : "bg-blue-600 dark:bg-blue-600 hover:bg-blue-500 dark:hover:bg-blue-500"
-              } text-white`}
-              title="모든 모듈 PPT 생성"
+              } text-white ${ADVANCED_BTN_DIM}`}
+              title="모든 모듈 PPT 생성 (고급기능)"
             >
+              <AdvancedLockBadge className="text-[7px] md:text-[10px] leading-none" />
               {isGeneratingPPTs ? (
                 <ArrowPathIcon className="h-2.5 w-2.5 md:h-3.5 md:w-3.5 animate-spin" />
               ) : (
@@ -11523,6 +11552,8 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
                 {isGeneratingPPTs ? "생성 중..." : "PPT 생성"}
               </span>
             </button>
+            </>
+            )}
             <button
               onClick={handleToggleRightPanel}
               className="p-1 md:p-1.5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors flex-shrink-0"
@@ -12272,6 +12303,11 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
       {/* AI 설정 (Gemini API 키) 모달 */}
       {isApiKeyModalOpen && (
         <ApiKeySettingsModal onClose={() => setIsApiKeyModalOpen(false)} />
+      )}
+
+      {/* 고급기능 잠금 해제 모달 */}
+      {isAdvancedModalOpen && (
+        <AdvancedUnlockModal onClose={() => setIsAdvancedModalOpen(false)} />
       )}
 
       {/* Samples Modal */}

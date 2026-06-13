@@ -4,6 +4,7 @@ import { XCircleIcon, SparklesIcon } from './icons';
 import { GoogleGenAI } from "@google/genai";
 import { getGeminiClient } from '../lib/aiClient';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
 
 interface FinalXolPricePreviewModalProps {
     module: CanvasModule;
@@ -73,14 +74,17 @@ You are a senior actuary creating a concise premium breakdown report. Use Korean
                 </header>
                 <main className="flex-grow p-6 overflow-auto">
                      <div className="flex justify-end mb-4">
+                        <AdvancedOnly>
                         <button
                             onClick={handleInterpret}
                             disabled={isInterpreting}
-                            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:bg-purple-400 disabled:cursor-wait transition-colors"
+                            className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:bg-purple-400 disabled:cursor-wait transition-colors ${ADVANCED_BTN_DIM}`}
                         >
+                            <AdvancedLockBadge />
                             <SparklesIcon className="w-5 h-5" />
                             {isInterpreting ? '분석 중...' : 'AI로 결과 해석하기'}
                         </button>
+                        </AdvancedOnly>
                     </div>
 
                     {isInterpreting && <div className="text-center p-4 text-gray-600">AI가 프리미엄 구성요소를 분석하고 있습니다...</div>}
