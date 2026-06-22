@@ -37,6 +37,7 @@ const ESTIMATOR_LABELS: Record<string, string> = {
   NegativeBinomialRegression: '음이항 회귀 (Negative Binomial Regression)',
   DecisionTree: '의사결정나무 (Decision Tree)',
   RandomForest: '랜덤 포레스트 (Random Forest)',
+  GradientBoosting: '그래디언트 부스팅 (Gradient Boosting)',
   NeuralNetwork: '신경망 (Neural Network)',
   SVM: '서포트 벡터 머신 (SVM)',
   LDA: '선형판별분석 (LDA)',
@@ -66,9 +67,12 @@ export function inspectScoringPipeline(
   const moduleMap = new Map<string, CanvasModule>();
   modules.forEach((m) => moduleMap.set(m.id, m));
 
-  const trainModule = modules.find((m) => m.type === 'TrainModel');
+  // TrainModel 또는 SweepParameters(둘 다 model_in + data_in → 적합 모델 출력)를 학습 모듈로 인정
+  const trainModule =
+    modules.find((m) => m.type === 'TrainModel') ||
+    modules.find((m) => m.type === 'SweepParameters');
 
-  // TrainModel에 연결된 모델 정의 모듈(model_in 포트) → 추정기 라벨 추론
+  // 학습 모듈에 연결된 모델 정의 모듈(model_in 포트) → 추정기 라벨 추론
   let estimatorLabel = '학습된 모델';
   if (trainModule) {
     const modelConn = connections.find(

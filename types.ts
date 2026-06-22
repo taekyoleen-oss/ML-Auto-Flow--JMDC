@@ -26,6 +26,7 @@ export enum ModuleType {
   NegativeBinomialRegression = "NegativeBinomialRegression",
   DecisionTree = "DecisionTree",
   RandomForest = "RandomForest",
+  GradientBoosting = "GradientBoosting",
   NeuralNetwork = "NeuralNetwork",
   SVM = "SVM",
   LDA = "LDA",
@@ -34,6 +35,7 @@ export enum ModuleType {
 
   // Model Operations
   TrainModel = "TrainModel",
+  SweepParameters = "SweepParameters",
   ScoreModel = "ScoreModel",
   EvaluateModel = "EvaluateModel",
 

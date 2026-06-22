@@ -74,6 +74,26 @@ export function validateModuleParameters(module: CanvasModule): string | null {
         return '레이블 컬럼(label_column)을 선택해야 합니다. 속성 패널에서 목표 컬럼을 선택해주세요.';
       break;
     }
+    case 'SweepParameters': {
+      const fc = p.feature_columns;
+      if (!fc || (Array.isArray(fc) && fc.length === 0))
+        return '특성 컬럼(feature_columns)을 1개 이상 선택해야 합니다. 속성 패널에서 컬럼을 선택해주세요.';
+      if (!p.label_column || p.label_column === '')
+        return '레이블 컬럼(label_column)을 선택해야 합니다. 속성 패널에서 목표 컬럼을 선택해주세요.';
+      if (p.param_grid !== undefined && p.param_grid !== null && p.param_grid !== '') {
+        try {
+          const grid = typeof p.param_grid === 'string' ? JSON.parse(p.param_grid) : p.param_grid;
+          if (typeof grid !== 'object' || Array.isArray(grid) || Object.keys(grid).length === 0)
+            return 'param_grid는 비어있지 않은 JSON 객체여야 합니다. 예: {"max_depth": [3, 5]}';
+        } catch {
+          return 'param_grid가 올바른 JSON이 아닙니다. 예: {"max_depth": [3, 5], "min_samples_split": [2, 5]}';
+        }
+      }
+      const cv = Number(p.cv);
+      if (!isNaN(cv) && cv < 2)
+        return 'cv(교차검증 fold 수)는 2 이상의 정수여야 합니다 (현재: ' + p.cv + ').';
+      break;
+    }
     case 'EvaluateModel': {
       if (!p.label_column || p.label_column === '')
         return '평가할 레이블 컬럼(label_column)을 선택해야 합니다.';
@@ -124,7 +144,8 @@ export function validateModuleParameters(module: CanvasModule): string | null {
     }
 
     case 'DecisionTree':
-    case 'RandomForest': {
+    case 'RandomForest':
+    case 'GradientBoosting': {
       const md = parseInt(p.max_depth);
       if (!isNaN(md) && md < 1)
         return `max_depth는 1 이상이거나 비워두어야 합니다 (현재: ${md})`;

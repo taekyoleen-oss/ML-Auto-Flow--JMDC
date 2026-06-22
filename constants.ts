@@ -150,6 +150,13 @@ export const TOOLBOX_MODULES = [
     description: "Trains a machine learning model with data.",
   },
   {
+    type: ModuleType.SweepParameters,
+    name: "Sweep Parameters",
+    icon: CogIcon,
+    description:
+      "Tunes a model with GridSearchCV (deterministic) and outputs the best fitted estimator.",
+  },
+  {
     type: ModuleType.ScoreModel,
     name: "Score Model",
     icon: CalculatorIcon,
@@ -202,6 +209,13 @@ export const TOOLBOX_MODULES = [
     icon: ShareIcon,
     description:
       "An ensemble of decision trees for classification or regression.",
+  },
+  {
+    type: ModuleType.GradientBoosting,
+    name: "Gradient Boosting",
+    icon: ShareIcon,
+    description:
+      "A boosted ensemble of decision trees for classification or regression.",
   },
   {
     type: ModuleType.NeuralNetwork,
@@ -730,6 +744,18 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
       outputs: [{ name: "model_out", type: "model" }],
     },
     {
+      type: ModuleType.GradientBoosting,
+      status: ModuleStatus.Pending,
+      parameters: {
+        model_purpose: "classification",
+        n_estimators: 100,
+        learning_rate: 0.1,
+        max_depth: 3,
+      },
+      inputs: [],
+      outputs: [{ name: "model_out", type: "model" }],
+    },
+    {
       type: ModuleType.NeuralNetwork,
       status: ModuleStatus.Pending,
       parameters: {
@@ -865,6 +891,31 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
       type: ModuleType.TrainModel,
       status: ModuleStatus.Pending,
       parameters: { feature_columns: [], label_column: null },
+      inputs: [
+        { name: "model_in", type: "model" },
+        { name: "data_in", type: "data" },
+      ],
+      outputs: [{ name: "trained_model_out", type: "model" }],
+    },
+    {
+      type: ModuleType.SweepParameters,
+      status: ModuleStatus.Pending,
+      parameters: {
+        feature_columns: [],
+        label_column: null,
+        // 모델 목적: 'classification' | 'regression' (scoring 기본값 결정)
+        model_purpose: "classification",
+        // 탐색 전략: GridSearchCV(완전 결정적) | RandomizedSearchCV(random_state=42 고정)
+        search_strategy: "GridSearchCV",
+        // param_grid는 JSON 문자열로 보관(편집기에서 직접 수정). 키는 추정기 파라미터명.
+        param_grid: '{"max_depth": [3, 5, 7], "min_samples_split": [2, 5]}',
+        // 교차검증 fold 수(정수) → shuffle 없음 → 완전 결정적
+        cv: 5,
+        // 평가 지표(빈 값이면 model_purpose 기준 기본값: accuracy / r2)
+        scoring: "accuracy",
+        // RandomizedSearchCV일 때만 사용하는 후보 샘플 수
+        n_iter: 10,
+      },
       inputs: [
         { name: "model_in", type: "model" },
         { name: "data_in", type: "data" },

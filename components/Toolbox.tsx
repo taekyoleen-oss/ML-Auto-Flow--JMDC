@@ -45,6 +45,7 @@ const statLabTypes = [
 const analysisOpTypes = [
   ModuleType.SplitData,
   ModuleType.TrainModel,
+  ModuleType.SweepParameters,
   ModuleType.ScoreModel,
   ModuleType.EvaluateModel,
   ModuleType.TrainClusteringModel,
@@ -56,6 +57,7 @@ const supervisedLearningTypes = [
   ModuleType.LogisticRegression,
   ModuleType.DecisionTree,
   ModuleType.RandomForest,
+  ModuleType.GradientBoosting,
   ModuleType.KNN,
   ModuleType.NeuralNetwork,
   ModuleType.SVM,

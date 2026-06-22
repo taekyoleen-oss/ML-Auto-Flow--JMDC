@@ -4383,7 +4383,7 @@ export async function evaluateModelPython(
 import json
 import pandas as pd
 import numpy as np
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, mean_squared_error, mean_absolute_error, r2_score, confusion_matrix
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, mean_squared_error, mean_absolute_error, r2_score, confusion_matrix, roc_auc_score, average_precision_score
 
 # 데이터 준비
 df = pd.DataFrame(js_data.to_py())
@@ -4448,7 +4448,15 @@ if model_type == 'classification':
     metrics['FP'] = fp
     metrics['TN'] = tn
     metrics['FN'] = fn
-    
+
+    # ROC-AUC & 평균 정밀도(PR-AUC) — 확률 점수가 있을 때만(결정적). 하드 레이블이면 생략.
+    if y_pred_proba is not None and is_binary:
+        try:
+            metrics['AUC-ROC'] = float(roc_auc_score(y_true, y_pred_proba))
+            metrics['Average Precision'] = float(average_precision_score(y_true, y_pred_proba))
+        except Exception:
+            pass
+
     # 여러 threshold에 대한 모든 통계량 계산 (0부터 1까지 0.01 단위)
     if calculate_threshold_metrics and y_pred_proba is not None:
         threshold_list = np.arange(0, 1.01, 0.01)
@@ -4497,11 +4505,24 @@ else:
     rmse = float(np.sqrt(mse))
     mae = float(mean_absolute_error(y_true, y_pred))
     r2 = float(r2_score(y_true, y_pred))
-    
+
+    # 상대 오차(책 Ch5 표준): 평균 예측기 대비 모델 오차 (결정적)
+    y_true_arr = np.asarray(y_true, dtype=float)
+    y_pred_arr = np.asarray(y_pred, dtype=float)
+    y_mean = float(np.mean(y_true_arr))
+    ss_res = float(np.sum((y_true_arr - y_pred_arr) ** 2))
+    ss_tot = float(np.sum((y_true_arr - y_mean) ** 2))
+    abs_res = float(np.sum(np.abs(y_true_arr - y_pred_arr)))
+    abs_tot = float(np.sum(np.abs(y_true_arr - y_mean)))
+    rse = float(ss_res / ss_tot) if ss_tot > 0 else float('nan')
+    rae = float(abs_res / abs_tot) if abs_tot > 0 else float('nan')
+
     metrics['Mean Squared Error (MSE)'] = mse
     metrics['Root Mean Squared Error (RMSE)'] = rmse
     metrics['Mean Absolute Error (MAE)'] = mae
     metrics['R-squared'] = r2
+    metrics['Relative Squared Error (RSE)'] = rse
+    metrics['Relative Absolute Error (RAE)'] = rae
 
 metrics
 `;

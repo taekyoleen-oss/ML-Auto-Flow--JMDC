@@ -232,6 +232,7 @@ const MODULE_OUTPUT_VAR: Record<string, string> = {
   TransitionData: 'transformed_data',
   ResampleData: 'resampled_data',
   TrainModel: 'trained_model',
+  SweepParameters: 'trained_model',
   ScoreModel: 'scored_data',
   EvaluateModel: 'evaluation_metrics',
   ResultModel: 'model_results',

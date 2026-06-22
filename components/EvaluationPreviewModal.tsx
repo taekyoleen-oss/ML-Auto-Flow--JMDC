@@ -11,9 +11,9 @@ const MetricBarChart: React.FC<{ metrics: Record<string, number | string>; model
     const [hoveredKey, setHoveredKey] = useState<string | null>(null);
 
     // 0~1 범위 지표 (높을수록 좋음)
-    const UNIT_METRICS = new Set(['Accuracy', 'Precision', 'Recall', 'F1-Score', 'AUC-ROC', 'R²', 'R2', 'R-squared']);
+    const UNIT_METRICS = new Set(['Accuracy', 'Precision', 'Recall', 'F1-Score', 'AUC-ROC', 'Average Precision', 'R²', 'R2', 'R-squared']);
     // 낮을수록 좋은 지표 (최대값 기준으로 역방향 표시)
-    const LOWER_BETTER = new Set(['MSE', 'RMSE', 'MAE', 'MedAE']);
+    const LOWER_BETTER = new Set(['MSE', 'RMSE', 'MAE', 'MedAE', 'Relative Squared Error (RSE)', 'Relative Absolute Error (RAE)']);
 
     const entries = Object.entries(metrics).filter(([, v]) => typeof v === 'number') as [string, number][];
     if (entries.length === 0) return null;
@@ -268,6 +268,29 @@ export const EvaluationPreviewModal: React.FC<EvaluationPreviewModalProps> = ({
 
     const auc = rocData.length > 0 ? calculateAUC(rocData) : 0;
 
+    // Precision-Recall Curve 데이터 계산 (recall 오름차순 정렬)
+    const prData = thresholdTable.length > 0
+        ? thresholdTable.map(row => {
+            // Recall = TP / (TP + FN), Precision = TP / (TP + FP)
+            const recall = (row.tp + row.fn) > 0 ? row.tp / (row.tp + row.fn) : 0;
+            const precision = (row.tp + row.fp) > 0 ? row.tp / (row.tp + row.fp) : 1;
+            return { recall, precision, threshold: row.threshold };
+        }).sort((a, b) => a.recall - b.recall)
+        : [];
+
+    // Average Precision (PR 곡선 아래 면적, 사다리꼴 근사)
+    const calculateAveragePrecision = (prPoints: Array<{recall: number, precision: number}>) => {
+        if (prPoints.length < 2) return 0;
+        let ap = 0;
+        for (let i = 1; i < prPoints.length; i++) {
+            const width = prPoints[i].recall - prPoints[i - 1].recall;
+            const avgHeight = (prPoints[i].precision + prPoints[i - 1].precision) / 2;
+            ap += width * avgHeight;
+        }
+        return ap;
+    };
+    const averagePrecision = prData.length > 0 ? calculateAveragePrecision(prData) : 0;
+
     // 회귀 모형용 scatter plot 데이터 가져오기
     const getInputData = useMemo((): DataPreview | null => {
         if (modelType !== 'regression' || !modules || !connections) return null;
@@ -451,6 +474,36 @@ export const EvaluationPreviewModal: React.FC<EvaluationPreviewModalProps> = ({
                                     </span>
                                 </div>
                             </div>
+                            {/* 2-1: 임계값(threshold) 슬라이더 — 이진 분류에서 P/R/F1 즉시 재계산 (앱 전용, 내보낸 코드 무관) */}
+                            {thresholdTable.length > 0 && (
+                                <div className="mt-5 pt-4 border-t border-blue-200">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="text-sm font-medium text-gray-700">
+                                            임계값 조정 (Threshold Slider)
+                                        </label>
+                                        <span className="text-sm font-mono font-bold text-blue-700">
+                                            {selectedThreshold.toFixed(2)}
+                                        </span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min={0}
+                                        max={1}
+                                        step={0.01}
+                                        value={selectedThreshold}
+                                        onChange={(e) => handleThresholdSelect(parseFloat(e.target.value))}
+                                        className="w-full accent-blue-600 cursor-pointer"
+                                    />
+                                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                                        <span>0.00</span>
+                                        <span>0.50</span>
+                                        <span>1.00</span>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        슬라이더를 움직이면 해당 임계값의 Precision/Recall/F1·혼동행렬이 즉시 갱신됩니다(미리 계산된 값에서 선택, 내보낸 Python 결과에는 영향 없음).
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -972,6 +1025,88 @@ export const EvaluationPreviewModal: React.FC<EvaluationPreviewModalProps> = ({
                                     </div>
                                     <p className="text-xs text-gray-500 mt-2 text-center">
                                         ROC Curve: 각 threshold에 대한 TPR과 FPR을 표시합니다. AUC (Area Under Curve)는 모델의 분류 성능을 나타냅니다.
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* 2-1: Precision-Recall Curve and Average Precision */}
+                            {prData.length > 0 && (
+                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mt-4">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-lg font-semibold text-gray-700">
+                                            Precision-Recall Curve
+                                        </h3>
+                                        <div className="text-lg font-bold text-emerald-600">
+                                            Avg Precision: {averagePrecision.toFixed(4)}
+                                        </div>
+                                    </div>
+                                    <div className="relative" style={{ height: '500px' }}>
+                                        <svg width="100%" height="100%" className="border border-gray-300 rounded" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet">
+                                            <defs>
+                                                <pattern id="prGrid" width="40" height="40" patternUnits="userSpaceOnUse">
+                                                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e5e7eb" strokeWidth="1"/>
+                                                </pattern>
+                                            </defs>
+                                            <rect width="100%" height="100%" fill="url(#prGrid)" />
+
+                                            {/* Grid lines - Y axis (Precision) */}
+                                            {[0, 0.2, 0.4, 0.6, 0.8, 1.0].map(val => {
+                                                const y = 460 - val * 420;
+                                                return (
+                                                    <g key={`pr-y-${val}`}>
+                                                        <line x1="60" y1={y} x2="780" y2={y} stroke="#d1d5db" strokeWidth="1" />
+                                                        <text x="55" y={y + 5} fontSize="12" fill="#6b7280" textAnchor="end">
+                                                            {val.toFixed(1)}
+                                                        </text>
+                                                    </g>
+                                                );
+                                            })}
+
+                                            {/* Grid lines - X axis (Recall) */}
+                                            {[0, 0.2, 0.4, 0.6, 0.8, 1.0].map(val => {
+                                                const x = 60 + val * 720;
+                                                return (
+                                                    <g key={`pr-x-${val}`}>
+                                                        <line x1={x} y1="40" x2={x} y2="460" stroke="#d1d5db" strokeWidth="1" />
+                                                        <text x={x} y="495" fontSize="12" fill="#6b7280" textAnchor="middle">
+                                                            {val.toFixed(1)}
+                                                        </text>
+                                                    </g>
+                                                );
+                                            })}
+
+                                            {/* PR Curve line */}
+                                            {prData.length > 1 && prData.map((point, i) => {
+                                                if (i === 0) return null;
+                                                const x1 = 60 + prData[i - 1].recall * 720;
+                                                const y1 = 460 - prData[i - 1].precision * 420;
+                                                const x2 = 60 + point.recall * 720;
+                                                const y2 = 460 - point.precision * 420;
+                                                return (
+                                                    <line key={`pr-${i}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#10b981" strokeWidth="2" />
+                                                );
+                                            })}
+
+                                            {/* PR Curve points */}
+                                            {prData.map((point, i) => {
+                                                const x = 60 + point.recall * 720;
+                                                const y = 460 - point.precision * 420;
+                                                return (
+                                                    <circle key={`pr-point-${i}`} cx={x} cy={y} r="3" fill="#10b981" />
+                                                );
+                                            })}
+
+                                            {/* Labels */}
+                                            <text x="400" y="25" fontSize="14" fontWeight="bold" fill="#374151" textAnchor="middle">
+                                                Recall
+                                            </text>
+                                            <text x="20" y="250" fontSize="14" fontWeight="bold" fill="#374151" transform="rotate(-90, 20, 250)">
+                                                Precision
+                                            </text>
+                                        </svg>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-2 text-center">
+                                        Precision-Recall Curve: 각 threshold에 대한 Precision과 Recall을 표시합니다. Average Precision은 PR 곡선 아래 면적입니다(불균형 데이터에 특히 유용).
                                     </p>
                                 </div>
                             )}

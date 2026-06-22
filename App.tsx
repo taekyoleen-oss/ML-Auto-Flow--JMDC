@@ -181,6 +181,7 @@ const isClassification = (
     ModuleType.KNN,
     ModuleType.DecisionTree,
     ModuleType.RandomForest,
+    ModuleType.GradientBoosting,
     ModuleType.NeuralNetwork,
     ModuleType.SVM,
   ];
@@ -951,6 +952,7 @@ Respond with ONLY the module type string, for example: 'ScoreModel'`;
       ModuleType.NegativeBinomialRegression,
       ModuleType.DecisionTree,
       ModuleType.RandomForest,
+      ModuleType.GradientBoosting,
       ModuleType.NeuralNetwork,
       ModuleType.SVM,
       ModuleType.LDA,
@@ -3460,6 +3462,7 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
     ModuleType.NegativeBinomialRegression,
     ModuleType.DecisionTree,
     ModuleType.RandomForest,
+    ModuleType.GradientBoosting,
     ModuleType.NeuralNetwork,
     ModuleType.SVM,
     ModuleType.LDA,

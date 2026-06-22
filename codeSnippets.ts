@@ -814,6 +814,42 @@ if p_model_purpose == 'classification':
 # model variable contains the model instance ready for training.
 `,
 
+  GradientBoosting: `
+from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
+
+# This module creates a gradient boosting tree model instance.
+# The model will be trained in the 'Train Model' module.
+# Parameters from UI
+p_model_purpose = {model_purpose}
+p_n_estimators = {n_estimators}
+p_learning_rate = {learning_rate}
+p_max_depth = {max_depth}
+
+# Create model instance based on model purpose
+if p_model_purpose == 'classification':
+    model = GradientBoostingClassifier(
+        n_estimators=p_n_estimators,
+        learning_rate=p_learning_rate,
+        max_depth=p_max_depth,
+        random_state=42
+    )
+else:
+    model = GradientBoostingRegressor(
+        n_estimators=p_n_estimators,
+        learning_rate=p_learning_rate,
+        max_depth=p_max_depth,
+        random_state=42
+    )
+
+print(f"Gradient Boosting model instance created successfully ({p_model_purpose}).")
+print(f"  N Estimators: {p_n_estimators}")
+print(f"  Learning Rate: {p_learning_rate}")
+print(f"  Max Depth: {p_max_depth}")
+
+# Note: The model is not fitted here. It will be fitted in the 'Train Model' module.
+# model variable contains the model instance ready for training.
+`,
+
   NeuralNetwork: `
 from sklearn.neural_network import MLPClassifier, MLPRegressor
 
@@ -898,6 +934,76 @@ y_train = dataframe[p_label_column]
 trained_model = model.fit(X_train, y_train)
 
 # The trained_model is now ready for use in Score Model or Evaluate Model modules
+`,
+  SweepParameters: `
+import json
+import pandas as pd
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+
+# This module tunes a model's hyperparameters with cross-validation and
+# outputs the BEST FITTED estimator (drop-in replacement for Train Model).
+# Inputs:
+#   'model'     : an UNFITTED estimator from a model-definition module (e.g. Decision Tree)
+#   'dataframe' : training data (typically the train split)
+# Parameters from UI
+p_feature_columns = {feature_columns}
+p_label_column = {label_column}
+p_search_strategy = {search_strategy}
+p_param_grid = {param_grid}
+p_cv = {cv}
+p_scoring = {scoring}
+p_n_iter = {n_iter}
+
+# Extract features / label
+X_train = dataframe[p_feature_columns]
+y_train = dataframe[p_label_column]
+
+# param_grid may arrive as a JSON string (from the UI) or already as a dict.
+if isinstance(p_param_grid, str):
+    param_grid = json.loads(p_param_grid)
+else:
+    param_grid = dict(p_param_grid)
+
+# scoring: empty/None -> let sklearn use the estimator's default scorer
+scoring = p_scoring if p_scoring else None
+
+# cv as an INTEGER -> deterministic K-Fold (no shuffle) for reproducibility.
+cv_folds = int(p_cv)
+
+if p_search_strategy == 'RandomizedSearchCV':
+    # RandomizedSearchCV is stochastic -> fix random_state=42 for reproducibility.
+    search = RandomizedSearchCV(
+        model,
+        param_distributions=param_grid,
+        n_iter=int(p_n_iter),
+        cv=cv_folds,
+        scoring=scoring,
+        random_state=42,
+        n_jobs=1,
+    )
+else:
+    # GridSearchCV with integer cv is fully deterministic (default / fixture path).
+    search = GridSearchCV(
+        model,
+        param_grid=param_grid,
+        cv=cv_folds,
+        scoring=scoring,
+        n_jobs=1,
+    )
+
+search.fit(X_train, y_train)
+
+# The best refitted estimator behaves exactly like a Train Model output.
+trained_model = search.best_estimator_
+
+print("Hyperparameter sweep complete.")
+print(f"  Strategy: {p_search_strategy}")
+print(f"  CV folds: {cv_folds}")
+print(f"  Scoring: {scoring if scoring is not None else 'estimator default'}")
+print(f"  Best params: {search.best_params_}")
+print(f"  Best CV score: {search.best_score_:.6f}")
+
+# 'trained_model' is now ready for Score Model / Evaluate Model modules.
 `,
   ScoreModel: `
 import pandas as pd
@@ -1055,7 +1161,11 @@ else:
 # clustered_data now contains original data plus cluster assignments / components.
 `,
   EvaluateModel: `
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, mean_squared_error, mean_absolute_error, r2_score
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score,
+    mean_squared_error, mean_absolute_error, r2_score,
+    roc_auc_score, average_precision_score,
+)
 import pandas as pd
 import numpy as np
 
@@ -1078,39 +1188,106 @@ if p_model_type == 'classification':
     precision = precision_score(y_true, y_pred, average='weighted', zero_division=0)
     recall = recall_score(y_true, y_pred, average='weighted', zero_division=0)
     f1 = f1_score(y_true, y_pred, average='weighted', zero_division=0)
-    
+
     evaluation_metrics = {
         'accuracy': accuracy,
         'precision': precision,
         'recall': recall,
         'f1_score': f1
     }
-    
+
     print("Classification Evaluation Metrics:")
     print(f"  Accuracy: {accuracy:.6f}")
     print(f"  Precision: {precision:.6f}")
     print(f"  Recall: {recall:.6f}")
     print(f"  F1-Score: {f1:.6f}")
-    
+
+    # --- ROC-AUC & Average Precision (deterministic given a fixed fitted model) ---
+    # roc_auc_score / average_precision_score need score-like inputs (probabilities or
+    # decision scores), not hard class labels. We re-derive them from the still-in-scope
+    # 'trained_model' (set by ScoreModel). Everything is wrapped so that models without
+    # probability support, or any edge case, degrade gracefully to 'N/A' — never crash.
+    roc_auc = None
+    avg_precision = None
+    try:
+        classes_sorted = sorted(pd.unique(y_true).tolist())
+        feat_cols = list(getattr(trained_model, 'feature_names_in_', []))
+        if not feat_cols:
+            feat_cols = scored_data.select_dtypes(include=['number']).columns.tolist()
+        X_eval = scored_data[feat_cols]
+        if hasattr(trained_model, 'predict_proba'):
+            y_score = np.asarray(trained_model.predict_proba(X_eval))
+        elif hasattr(trained_model, 'decision_function'):
+            y_score = np.asarray(trained_model.decision_function(X_eval))
+        else:
+            y_score = None
+
+        if y_score is not None:
+            if len(classes_sorted) == 2:
+                # Binary: use the positive-class score column.
+                if y_score.ndim == 2 and y_score.shape[1] >= 2:
+                    pos_score = y_score[:, 1]
+                else:
+                    pos_score = y_score.ravel()
+                pos_label = classes_sorted[1]
+                y_bin = (np.asarray(y_true) == pos_label).astype(int)
+                roc_auc = float(roc_auc_score(y_bin, pos_score))
+                avg_precision = float(average_precision_score(y_bin, pos_score))
+            else:
+                # Multiclass: safe one-vs-rest macro AUC (deterministic).
+                roc_auc = float(roc_auc_score(
+                    y_true, y_score, multi_class='ovr', average='macro'
+                ))
+    except Exception:
+        roc_auc = None
+        avg_precision = None
+
+    if roc_auc is not None:
+        evaluation_metrics['roc_auc'] = roc_auc
+        print(f"  ROC-AUC: {roc_auc:.6f}")
+    else:
+        print("  ROC-AUC: N/A (model has no probability/score output)")
+    if avg_precision is not None:
+        evaluation_metrics['average_precision'] = avg_precision
+        print(f"  Average Precision (PR-AUC): {avg_precision:.6f}")
+    else:
+        print("  Average Precision (PR-AUC): N/A (binary probability scores required)")
+
 else:  # regression
     # Regression metrics
     mse = mean_squared_error(y_true, y_pred)
     rmse = np.sqrt(mse)
     mae = mean_absolute_error(y_true, y_pred)
     r2 = r2_score(y_true, y_pred)
-    
+
+    # Relative errors (book Ch5 standard: compare model error to a naive mean predictor).
+    # Deterministic; guarded against a zero-variance target (constant y_true).
+    y_true_arr = np.asarray(y_true, dtype=float)
+    y_pred_arr = np.asarray(y_pred, dtype=float)
+    y_mean = float(np.mean(y_true_arr))
+    ss_res = float(np.sum((y_true_arr - y_pred_arr) ** 2))
+    ss_tot = float(np.sum((y_true_arr - y_mean) ** 2))
+    abs_res = float(np.sum(np.abs(y_true_arr - y_pred_arr)))
+    abs_tot = float(np.sum(np.abs(y_true_arr - y_mean)))
+    rse = (ss_res / ss_tot) if ss_tot > 0 else float('nan')   # Relative Squared Error
+    rae = (abs_res / abs_tot) if abs_tot > 0 else float('nan') # Relative Absolute Error
+
     evaluation_metrics = {
         'mse': mse,
         'rmse': rmse,
         'mae': mae,
-        'r2': r2
+        'r2': r2,
+        'relative_squared_error': rse,
+        'relative_absolute_error': rae
     }
-    
+
     print("Regression Evaluation Metrics:")
     print(f"  Mean Squared Error (MSE): {mse:.6f}")
     print(f"  Root Mean Squared Error (RMSE): {rmse:.6f}")
     print(f"  Mean Absolute Error (MAE): {mae:.6f}")
     print(f"  R-squared (R²): {r2:.6f}")
+    print(f"  Relative Squared Error (RSE): {rse:.6f}")
+    print(f"  Relative Absolute Error (RAE): {rae:.6f}")
 
 # evaluation_metrics contains all calculated statistics
 `,

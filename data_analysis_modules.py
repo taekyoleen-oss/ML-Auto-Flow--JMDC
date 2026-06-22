@@ -10,6 +10,7 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler, RobustScaler, La
 from sklearn.linear_model import LinearRegression, Lasso, Ridge, ElasticNet, LogisticRegression, PoissonRegressor
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
 from sklearn.svm import SVC, SVR
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.naive_bayes import GaussianNB
@@ -17,7 +18,8 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.cluster import KMeans, DBSCAN
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.decomposition import PCA
-from sklearn.metrics import accuracy_score, mean_squared_error, r2_score, classification_report, confusion_matrix
+from sklearn.metrics import accuracy_score, mean_squared_error, mean_absolute_error, r2_score, classification_report, confusion_matrix
+from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, average_precision_score
 from sklearn.impute import SimpleImputer, KNNImputer
 from imblearn.over_sampling import SMOTE
 from imblearn.under_sampling import NearMiss
@@ -1048,6 +1050,47 @@ def create_random_forest(model_purpose: str = 'classification', n_estimators: in
     return model
 
 
+def create_gradient_boosting(model_purpose: str = 'classification', n_estimators: int = 100,
+                             learning_rate: float = 0.1, max_depth: int = 3):
+    """
+    그래디언트 부스팅 트리 모델을 생성합니다.
+
+    Parameters:
+    -----------
+    model_purpose : str
+        모델 목적: 'classification', 'regression'
+    n_estimators : int
+        부스팅 단계(트리) 개수
+    learning_rate : float
+        각 트리의 기여도를 줄이는 학습률
+    max_depth : int
+        각 회귀 추정기의 최대 깊이
+
+    Returns:
+    --------
+    GradientBoosting 모델 객체
+    """
+    print(f"그래디언트 부스팅 모델 생성 중 ({model_purpose})...")
+
+    if model_purpose == 'classification':
+        model = GradientBoostingClassifier(
+            n_estimators=n_estimators,
+            learning_rate=learning_rate,
+            max_depth=max_depth,
+            random_state=42
+        )
+    else:
+        model = GradientBoostingRegressor(
+            n_estimators=n_estimators,
+            learning_rate=learning_rate,
+            max_depth=max_depth,
+            random_state=42
+        )
+
+    print("모델 생성 완료.")
+    return model
+
+
 def create_neural_network(model_purpose: str = 'classification', hidden_layer_sizes: str = '100',
                          activation: str = 'relu', max_iter: int = 200, random_state: int = 42):
     """
@@ -1232,9 +1275,91 @@ def train_model(model, df: pd.DataFrame, feature_columns: list, label_column: st
     print(f"레이블: {label_column}")
     
     model.fit(X, y)
-    
+
     print("모델 훈련 완료.")
     return model
+
+
+def sweep_parameters(model, df: pd.DataFrame, feature_columns: list, label_column: str,
+                     param_grid, cv: int = 5, scoring=None,
+                     search_strategy: str = 'GridSearchCV', n_iter: int = 10):
+    """
+    하이퍼파라미터를 교차검증으로 탐색하여 '최적 적합 추정기'를 반환합니다.
+
+    codeSnippets.ts 의 SweepParameters 템플릿과 동작이 1:1 일치합니다(재현성 불변식).
+
+    Parameters
+    ----------
+    model : 미적합(unfitted) 추정기
+        모델 정의 모듈에서 만들어진 추정기 인스턴스.
+    df : pd.DataFrame
+        훈련 데이터(보통 train split).
+    feature_columns : list
+        특성 컬럼 리스트.
+    label_column : str
+        레이블 컬럼 이름.
+    param_grid : dict | str
+        탐색할 파라미터 그리드. JSON 문자열로 들어오면 json.loads로 파싱.
+    cv : int
+        교차검증 fold 수. 정수 → shuffle 없는 K-Fold → 완전 결정적.
+    scoring : str | None
+        평가 지표. None이면 추정기 기본 scorer 사용.
+    search_strategy : str
+        'GridSearchCV'(기본, 완전 결정적) | 'RandomizedSearchCV'(random_state=42 고정).
+    n_iter : int
+        RandomizedSearchCV의 후보 샘플 수.
+
+    Returns
+    -------
+    최적 적합 추정기(Train Model 출력과 동일하게 Score/Evaluate에서 사용 가능).
+    """
+    import json
+    from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+
+    print("하이퍼파라미터 스윕 시작...")
+
+    X = df[feature_columns]
+    y = df[label_column]
+
+    if isinstance(param_grid, str):
+        param_grid = json.loads(param_grid)
+    else:
+        param_grid = dict(param_grid)
+
+    scoring = scoring if scoring else None
+    cv_folds = int(cv)
+
+    if search_strategy == 'RandomizedSearchCV':
+        # 확률적 → 재현성 위해 random_state=42 고정.
+        search = RandomizedSearchCV(
+            model,
+            param_distributions=param_grid,
+            n_iter=int(n_iter),
+            cv=cv_folds,
+            scoring=scoring,
+            random_state=42,
+            n_jobs=1,
+        )
+    else:
+        # GridSearchCV + 정수 cv → 완전 결정적(기본/픽스처 경로).
+        search = GridSearchCV(
+            model,
+            param_grid=param_grid,
+            cv=cv_folds,
+            scoring=scoring,
+            n_jobs=1,
+        )
+
+    search.fit(X, y)
+    trained_model = search.best_estimator_
+
+    print("하이퍼파라미터 스윕 완료.")
+    print(f"  Strategy: {search_strategy}")
+    print(f"  CV folds: {cv_folds}")
+    print(f"  Best params: {search.best_params_}")
+    print(f"  Best CV score: {search.best_score_:.6f}")
+
+    return trained_model
 
 
 def score_model(model, df: pd.DataFrame, feature_columns: list):
@@ -1272,7 +1397,7 @@ def score_model(model, df: pd.DataFrame, feature_columns: list):
 
 
 def evaluate_model(model, df: pd.DataFrame, label_column: str, prediction_column: str = 'Predict',
-                   model_type: str = 'regression'):
+                   model_type: str = 'regression', feature_columns: list = None):
     """
     모델의 성능을 평가합니다.
     
@@ -1305,26 +1430,86 @@ def evaluate_model(model, df: pd.DataFrame, label_column: str, prediction_column
         accuracy = accuracy_score(y_true, y_pred)
         metrics['accuracy'] = accuracy
         print(f"정확도: {accuracy:.4f}")
-        
+
         print("\n분류 리포트:")
         print(classification_report(y_true, y_pred))
-        
+
         print("\n혼동 행렬:")
         print(confusion_matrix(y_true, y_pred))
-    
+
+        # ROC-AUC & 평균 정밀도(PR-AUC) — 모델이 확률/점수 출력을 지원할 때만(결정적).
+        # 하드 레이블만으로는 계산 불가하므로 model의 predict_proba/decision_function을 사용한다.
+        roc_auc = None
+        avg_precision = None
+        try:
+            classes_sorted = sorted(pd.unique(y_true).tolist())
+            feat_cols = feature_columns
+            if not feat_cols:
+                feat_cols = list(getattr(model, 'feature_names_in_', []))
+            if not feat_cols:
+                feat_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+            X_eval = df[feat_cols]
+            if hasattr(model, 'predict_proba'):
+                y_score = np.asarray(model.predict_proba(X_eval))
+            elif hasattr(model, 'decision_function'):
+                y_score = np.asarray(model.decision_function(X_eval))
+            else:
+                y_score = None
+
+            if y_score is not None:
+                if len(classes_sorted) == 2:
+                    if y_score.ndim == 2 and y_score.shape[1] >= 2:
+                        pos_score = y_score[:, 1]
+                    else:
+                        pos_score = y_score.ravel()
+                    pos_label = classes_sorted[1]
+                    y_bin = (np.asarray(y_true) == pos_label).astype(int)
+                    roc_auc = float(roc_auc_score(y_bin, pos_score))
+                    avg_precision = float(average_precision_score(y_bin, pos_score))
+                else:
+                    roc_auc = float(roc_auc_score(y_true, y_score, multi_class='ovr', average='macro'))
+        except Exception:
+            roc_auc = None
+            avg_precision = None
+
+        if roc_auc is not None:
+            metrics['roc_auc'] = roc_auc
+            print(f"ROC-AUC: {roc_auc:.4f}")
+        if avg_precision is not None:
+            metrics['average_precision'] = avg_precision
+            print(f"평균 정밀도 (PR-AUC): {avg_precision:.4f}")
+
     else:  # regression
         mse = mean_squared_error(y_true, y_pred)
         rmse = np.sqrt(mse)
+        mae = mean_absolute_error(y_true, y_pred)
         r2 = r2_score(y_true, y_pred)
-        
+
+        # 상대 오차(책 Ch5 표준): 모델 오차를 평균 예측기 대비로 비교(결정적).
+        y_true_arr = np.asarray(y_true, dtype=float)
+        y_pred_arr = np.asarray(y_pred, dtype=float)
+        y_mean = float(np.mean(y_true_arr))
+        ss_res = float(np.sum((y_true_arr - y_pred_arr) ** 2))
+        ss_tot = float(np.sum((y_true_arr - y_mean) ** 2))
+        abs_res = float(np.sum(np.abs(y_true_arr - y_pred_arr)))
+        abs_tot = float(np.sum(np.abs(y_true_arr - y_mean)))
+        rse = (ss_res / ss_tot) if ss_tot > 0 else float('nan')
+        rae = (abs_res / abs_tot) if abs_tot > 0 else float('nan')
+
         metrics['mse'] = mse
         metrics['rmse'] = rmse
+        metrics['mae'] = mae
         metrics['r2'] = r2
-        
+        metrics['relative_squared_error'] = rse
+        metrics['relative_absolute_error'] = rae
+
         print(f"평균 제곱 오차 (MSE): {mse:.4f}")
         print(f"평균 제곱근 오차 (RMSE): {rmse:.4f}")
+        print(f"평균 절대 오차 (MAE): {mae:.4f}")
         print(f"결정 계수 (R²): {r2:.4f}")
-    
+        print(f"상대 제곱 오차 (RSE): {rse:.4f}")
+        print(f"상대 절대 오차 (RAE): {rae:.4f}")
+
     return metrics
 
 

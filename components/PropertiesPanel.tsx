@@ -3129,6 +3129,231 @@ const renderParameters = (
           )}
         </>
       );
+    case ModuleType.SweepParameters: {
+      const sourceData = getConnectedDataSource(module.id);
+      const inputColumns = sourceData?.columns || [];
+
+      if (inputColumns.length === 0) {
+        return (
+          <p className="text-sm text-gray-500">
+            Connect a data source to the 'data_in' port and a model definition to
+            the 'model_in' port to configure.
+          </p>
+        );
+      }
+
+      const {
+        feature_columns: sweepFeatures = [],
+        label_column: sweepLabel = null,
+        search_strategy = "GridSearchCV",
+        param_grid = '{"max_depth": [3, 5, 7], "min_samples_split": [2, 5]}',
+        cv = 5,
+        scoring = "accuracy",
+        n_iter = 10,
+      } = module.parameters;
+
+      const handleSweepFeatureChange = (colName: string, isChecked: boolean) => {
+        const newFeatures = isChecked
+          ? [...sweepFeatures, colName]
+          : sweepFeatures.filter((c: string) => c !== colName);
+        onParamChange("feature_columns", newFeatures);
+      };
+
+      const handleSweepLabelChange = (colName: string) => {
+        const newLabel = colName === "" ? null : colName;
+        onParamChange("label_column", newLabel);
+        if (newLabel && sweepFeatures.includes(newLabel)) {
+          onParamChange(
+            "feature_columns",
+            sweepFeatures.filter((c: string) => c !== newLabel)
+          );
+        }
+      };
+
+      const handleSweepSelectAll = (selectAll: boolean) => {
+        if (selectAll) {
+          onParamChange(
+            "feature_columns",
+            inputColumns
+              .map((col) => col.name)
+              .filter((name) => name !== sweepLabel)
+          );
+        } else {
+          onParamChange("feature_columns", []);
+        }
+      };
+
+      let paramGridValid = true;
+      try {
+        const parsed =
+          typeof param_grid === "string" ? JSON.parse(param_grid) : param_grid;
+        paramGridValid =
+          typeof parsed === "object" &&
+          parsed !== null &&
+          !Array.isArray(parsed) &&
+          Object.keys(parsed).length > 0;
+      } catch {
+        paramGridValid = false;
+      }
+
+      return (
+        <div className="space-y-4">
+          <div>
+            <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
+              Search Strategy
+            </h5>
+            <select
+              value={search_strategy}
+              onChange={(e) => onParamChange("search_strategy", e.target.value)}
+              className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="GridSearchCV">GridSearchCV (결정적·기본)</option>
+              <option value="RandomizedSearchCV">
+                RandomizedSearchCV (random_state=42)
+              </option>
+            </select>
+            <p className="text-[11px] text-gray-400 mt-1">
+              GridSearchCV는 정수 cv와 함께 완전히 결정적입니다(재현성 보장).
+            </p>
+          </div>
+
+          <div>
+            <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
+              Param Grid (JSON)
+            </h5>
+            <textarea
+              value={
+                typeof param_grid === "string"
+                  ? param_grid
+                  : JSON.stringify(param_grid)
+              }
+              onChange={(e) => onParamChange("param_grid", e.target.value)}
+              rows={3}
+              spellCheck={false}
+              className={`w-full font-mono bg-white dark:bg-gray-700 border rounded px-2 py-1.5 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-2 ${
+                paramGridValid
+                  ? "border-gray-300 dark:border-gray-600 focus:ring-blue-500"
+                  : "border-red-400 focus:ring-red-500"
+              }`}
+            />
+            {!paramGridValid && (
+              <p className="text-[11px] text-red-500 mt-1">
+                올바른 JSON 객체가 아닙니다. 예:{" "}
+                {'{"max_depth": [3, 5], "min_samples_split": [2, 5]}'}
+              </p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
+                CV Folds
+              </h5>
+              <input
+                type="number"
+                min={2}
+                step={1}
+                value={cv}
+                onChange={(e) =>
+                  onParamChange("cv", parseInt(e.target.value, 10) || 5)
+                }
+                className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
+                Scoring
+              </h5>
+              <input
+                type="text"
+                value={scoring}
+                placeholder="accuracy / r2 / f1_macro …"
+                onChange={(e) => onParamChange("scoring", e.target.value)}
+                className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          {search_strategy === "RandomizedSearchCV" && (
+            <div>
+              <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
+                N Iter (RandomizedSearchCV)
+              </h5>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={n_iter}
+                onChange={(e) =>
+                  onParamChange("n_iter", parseInt(e.target.value, 10) || 10)
+                }
+                className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+
+          <div>
+            <h5 className="text-xs text-gray-500 uppercase font-bold mb-2">
+              Label Column
+            </h5>
+            <select
+              value={sweepLabel || ""}
+              onChange={(e) => handleSweepLabelChange(e.target.value)}
+              className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">공백</option>
+              {inputColumns.map((col) => (
+                <option key={col.name} value={col.name}>
+                  {col.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <h5 className="text-xs text-gray-700 dark:text-gray-500 uppercase font-bold">
+                Feature Columns
+              </h5>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleSweepSelectAll(true)}
+                  className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-md font-semibold text-gray-900 dark:text-white"
+                >
+                  Select All
+                </button>
+                <button
+                  onClick={() => handleSweepSelectAll(false)}
+                  className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-md font-semibold text-gray-900 dark:text-white"
+                >
+                  Deselect All
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2 pr-2">
+              {inputColumns.map((col) => (
+                <label
+                  key={col.name}
+                  className="flex items-center gap-2 text-sm truncate text-gray-900 dark:text-white"
+                  title={col.name}
+                >
+                  <input
+                    type="checkbox"
+                    checked={sweepFeatures.includes(col.name)}
+                    onChange={(e) =>
+                      handleSweepFeatureChange(col.name, e.target.checked)
+                    }
+                    disabled={col.name === sweepLabel}
+                    className="h-4 w-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                  />
+                  <span className="truncate">{col.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
     case ModuleType.TrainModel:
     case ModuleType.ResultModel: {
       const sourceData = getConnectedDataSource(module.id);
@@ -3709,6 +3934,38 @@ const renderParameters = (
                 ? ["gini", "entropy"]
                 : ["squared_error", "absolute_error", "poisson"]
             }
+          />
+        </>
+      );
+    }
+    case ModuleType.GradientBoosting: {
+      const purpose = module.parameters.model_purpose;
+      return (
+        <>
+          <PropertySelect
+            label="Model Purpose"
+            value={purpose}
+            onChange={(v) => onParamChange("model_purpose", v)}
+            options={["classification", "regression"]}
+          />
+          <PropertyInput
+            label="n_estimators"
+            type="number"
+            value={module.parameters.n_estimators}
+            onChange={(v) => onParamChange("n_estimators", v)}
+          />
+          <PropertyInput
+            label="learning_rate"
+            type="number"
+            value={module.parameters.learning_rate}
+            onChange={(v) => onParamChange("learning_rate", v)}
+            step="0.01"
+          />
+          <PropertyInput
+            label="max_depth"
+            type="number"
+            value={module.parameters.max_depth}
+            onChange={(v) => onParamChange("max_depth", v)}
           />
         </>
       );
@@ -5497,6 +5754,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             const complexModels = [
               ModuleType.DecisionTree,
               ModuleType.RandomForest,
+              ModuleType.GradientBoosting,
               ModuleType.NeuralNetwork,
               ModuleType.SVM,
               ModuleType.KNN,
@@ -5546,7 +5804,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     <div className="bg-blue-900/30 p-3 rounded-lg text-xs text-blue-300 border border-blue-700/50">
                       <p className="font-sans">
                         {modelType === ModuleType.DecisionTree ||
-                        modelType === ModuleType.RandomForest
+                        modelType === ModuleType.RandomForest ||
+                        modelType === ModuleType.GradientBoosting
                           ? "Decision Tree 기반 모델은 트리 구조로 예측을 수행합니다. Feature Importance를 확인하세요."
                           : "이 모델 타입은 선형 방정식으로 표현할 수 없습니다."}
                       </p>
@@ -5922,6 +6181,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   ModuleType.NegativeBinomialRegression,
                   ModuleType.DecisionTree,
                   ModuleType.RandomForest,
+                  ModuleType.GradientBoosting,
                   ModuleType.NeuralNetwork,
                   ModuleType.SVM,
                   ModuleType.LinearDiscriminantAnalysis,

@@ -295,6 +295,7 @@ const TuningChart: React.FC<TuningChartProps> = ({ candidates, scoringMetric }) 
 const complexModels = [
     ModuleType.DecisionTree,
     ModuleType.RandomForest,
+    ModuleType.GradientBoosting,
     ModuleType.NeuralNetwork,
     ModuleType.SVM,
     ModuleType.KNN,
@@ -651,7 +652,8 @@ ${topFeatures}
                             ) : (
                                 <div className="bg-blue-50 rounded-lg p-3 text-sm text-blue-800 border border-blue-200">
                                     <p className="font-sans">
-                                        {modelType === ModuleType.RandomForest
+                                        {modelType === ModuleType.RandomForest ||
+                                        modelType === ModuleType.GradientBoosting
                                             ? "Decision Tree 기반 모델은 트리 구조로 예측을 수행하므로 선형 방정식으로 표현할 수 없습니다. 대신 Feature Importance를 통해 각 변수의 중요도를 확인할 수 있습니다."
                                             : "이 모델 타입은 선형 방정식으로 표현할 수 없습니다. Feature Importance를 통해 각 변수의 중요도를 확인할 수 있습니다."}
                                     </p>
