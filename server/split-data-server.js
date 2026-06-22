@@ -507,6 +507,47 @@ app.post('/api/generate-ppts', async (req, res) => {
 });
 
 // ============================================================================
+// URL/원격 CSV 프록시 (CORS 우회) — Phase 4: URL 데이터 로더
+// 브라우저에서 직접 외부 URL을 fetch하면 CORS로 막히는 경우가 많아,
+// 서버에서 대신 가져와 CSV 텍스트를 그대로 반환한다.
+// 재현성 불변식 영향 없음: 가져온 CSV 텍스트는 업로드 파일과 동일하게
+// 기존 파서로 파싱되어 동일한 DataPreview 구조로 저장된다.
+// ============================================================================
+app.get('/api/proxy-csv', async (req, res) => {
+  const url = req.query.url;
+  if (!url || typeof url !== 'string') {
+    return res.status(400).json({ error: 'Missing "url" query parameter' });
+  }
+  // SSRF 완화: http/https만 허용
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return res.status(400).json({ error: 'Invalid URL' });
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return res.status(400).json({ error: 'Only http/https URLs are allowed' });
+  }
+  try {
+    const upstream = await fetch(url, {
+      headers: { Accept: 'text/csv, text/plain, application/octet-stream, */*' },
+      redirect: 'follow',
+    });
+    if (!upstream.ok) {
+      return res
+        .status(502)
+        .json({ error: `Upstream responded ${upstream.status} ${upstream.statusText}` });
+    }
+    const text = await upstream.text();
+    res.set('Content-Type', 'text/plain; charset=utf-8');
+    res.status(200).send(text);
+  } catch (error) {
+    console.error('proxy-csv error:', error);
+    res.status(502).json({ error: 'Failed to fetch URL', details: error.message });
+  }
+});
+
+// ============================================================================
 // 서버 시작
 // ============================================================================
 
@@ -514,6 +555,7 @@ app.listen(PORT, () => {
     console.log(`서버가 포트 ${PORT}에서 실행 중입니다.`);
     console.log(`- SplitData API: http://localhost:${PORT}/api/split-data (ready)`);
     console.log(`- PPT 생성 API: http://localhost:${PORT}/api/generate-ppts (ready)`);
+    console.log(`- URL CSV 프록시: http://localhost:${PORT}/api/proxy-csv?url=... (ready)`);
     console.log(
       db
         ? `- Samples API: http://localhost:${PORT}/api/samples (ready)`

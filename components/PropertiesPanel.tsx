@@ -718,6 +718,7 @@ const renderParameters = (
                 fileContent: csvContent,
                 fileType: "excel",
                 sheetName: firstSheetName,
+                sourceType: "file",
               });
             } else {
               // CSV 파일 처리
@@ -728,6 +729,7 @@ const renderParameters = (
                   source: file.name,
                   fileContent: content,
                   fileType: "csv",
+                  sourceType: "file",
                 });
               };
               reader.readAsText(file);
@@ -743,6 +745,73 @@ const renderParameters = (
           }
         } else {
           fileInputRef.current?.click();
+        }
+      };
+
+      // Phase 4: URL/원격 CSV 로더 — JS로 CSV 텍스트를 받아 업로드 파일과
+      // 동일하게 fileContent에 저장한다. Pyodide 실행 경로는 변경 없음.
+      const handleUrlLoad = async () => {
+        const url = String(module.parameters.url || "").trim();
+        if (!url) {
+          alert("CSV 파일의 URL을 입력해주세요.");
+          return;
+        }
+        if (!/^https?:\/\//i.test(url)) {
+          alert("http:// 또는 https:// 로 시작하는 URL을 입력해주세요.");
+          return;
+        }
+        try {
+          updateModuleParameters(module.id, { urlLoading: true });
+          let text: string | null = null;
+          // 1차: 서버측 CORS 프록시 경유
+          try {
+            const proxied = await fetch(
+              `/api/proxy-csv?url=${encodeURIComponent(url)}`
+            );
+            if (proxied.ok) {
+              text = await proxied.text();
+            }
+          } catch {
+            /* 프록시 실패 시 직접 fetch로 폴백 */
+          }
+          // 2차(폴백): 브라우저에서 직접 fetch (CORS 허용 서버 대상)
+          if (text === null) {
+            const direct = await fetch(url);
+            if (!direct.ok) {
+              throw new Error(`HTTP ${direct.status} ${direct.statusText}`);
+            }
+            text = await direct.text();
+          }
+          if (!text || !text.trim()) {
+            throw new Error("빈 응답입니다(데이터가 없습니다).");
+          }
+          const fileName = (() => {
+            try {
+              const p = new URL(url).pathname;
+              const base = p.substring(p.lastIndexOf("/") + 1);
+              return base || url;
+            } catch {
+              return url;
+            }
+          })();
+          cacheFileContent(fileName, text);
+          // 업로드 파일과 동일한 파라미터 구조로 저장 → DataPreview 생성 경로 동일
+          updateModuleParameters(module.id, {
+            source: url,
+            fileContent: text,
+            fileType: "csv",
+            sourceType: "url",
+            sheetName: undefined,
+            urlLoading: false,
+          });
+        } catch (error: any) {
+          updateModuleParameters(module.id, { urlLoading: false });
+          console.error("URL CSV 로드 실패:", error);
+          alert(
+            `URL에서 CSV를 불러오지 못했습니다.\n${
+              error?.message || error
+            }\n\n서버(포트 3002)가 실행 중인지, URL이 올바른지 확인해주세요.`
+          );
         }
       };
 
@@ -763,6 +832,36 @@ const renderParameters = (
             >
               Browse...
             </button>
+          </div>
+          {/* Phase 4: URL/원격 CSV 로더 (가산 기능, 기본 소스는 파일) */}
+          <div className="mt-2">
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+              또는 URL에서 불러오기
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={module.parameters.url || ""}
+                onChange={(e) => onParamChange("url", e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleUrlLoad();
+                }}
+                className="flex-grow bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="https://example.com/data.csv"
+              />
+              <button
+                onClick={handleUrlLoad}
+                disabled={!!module.parameters.urlLoading}
+                className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md font-semibold text-white transition-colors whitespace-nowrap"
+              >
+                {module.parameters.urlLoading ? "불러오는 중..." : "URL 로드"}
+              </button>
+            </div>
+            {module.parameters.sourceType === "url" && (
+              <div className="mt-1 text-xs text-blue-600 dark:text-blue-400">
+                URL 소스로 로드됨 · 내보낸 코드는 pd.read_csv(URL)을 사용합니다.
+              </div>
+            )}
           </div>
           {/* 파일 타입 표시 */}
           {module.parameters.fileType === "excel" &&
@@ -791,6 +890,7 @@ const renderParameters = (
                           onParamChange('source', fname);
                           onParamChange('fileContent', content);
                           onParamChange('fileType', isExcel ? 'excel' : 'csv');
+                          onParamChange('sourceType', 'file');
                         }
                       }}
                       className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800/60 transition-colors max-w-[180px] truncate"
@@ -4829,6 +4929,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             fileContent: csvContent,
             fileType: "excel",
             sheetName: firstSheetName,
+            sourceType: "file",
           });
         } catch (error) {
           console.error("Error processing Excel file:", error);
@@ -4844,6 +4945,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             source: file.name,
             fileContent: content,
             fileType: "csv",
+            sourceType: "file",
           });
         };
         reader.readAsText(file);
@@ -4856,6 +4958,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       updateModuleParameters(module.id, {
         source: sample.name,
         fileContent: sample.content,
+        sourceType: "file",
       });
     }
   };

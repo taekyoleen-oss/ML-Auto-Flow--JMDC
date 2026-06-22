@@ -1,0 +1,19 @@
+{
+  "name": "book-Ch3 adult census income (DecisionTree classification)",
+  "modules": [
+    { "type": "LoadData", "name": "Load", "parameters": { "source": "adult.csv" } },
+    { "type": "SplitData", "name": "Split", "parameters": { "train_size": 0.8, "random_state": 42, "shuffle": "True", "stratify": "False", "stratify_column": null } },
+    { "type": "DecisionTree", "name": "Tree", "parameters": { "model_purpose": "classification", "criterion": "gini", "max_depth": 8, "min_samples_split": 2, "min_samples_leaf": 1 } },
+    { "type": "TrainModel", "name": "Train", "parameters": { "feature_columns": ["age","fnlwgt","education-num","capital-gain","capital-loss","hours-per-week"], "label_column": "income" } },
+    { "type": "ScoreModel", "name": "Score", "parameters": {} },
+    { "type": "EvaluateModel", "name": "Eval", "parameters": { "model_type": "classification", "label_column": "income", "prediction_column": "Predict", "threshold": 0.5 } }
+  ],
+  "connections": [
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 1, "toPort": "data_in" },
+    { "fromModuleIndex": 1, "fromPort": "train_data_out", "toModuleIndex": 3, "toPort": "data_in" },
+    { "fromModuleIndex": 2, "fromPort": "model_out", "toModuleIndex": 3, "toPort": "model_in" },
+    { "fromModuleIndex": 3, "fromPort": "trained_model_out", "toModuleIndex": 4, "toPort": "model_in" },
+    { "fromModuleIndex": 1, "fromPort": "test_data_out", "toModuleIndex": 4, "toPort": "data_in" },
+    { "fromModuleIndex": 4, "fromPort": "scored_data_out", "toModuleIndex": 5, "toPort": "data_in" }
+  ]
+}

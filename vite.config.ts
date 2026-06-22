@@ -30,6 +30,12 @@ export default defineConfig(({ mode }) => {
             target: 'http://localhost:3002',
             changeOrigin: true,
             secure: false,
+          },
+          // Phase 4: URL/원격 CSV 로더 — 서버측 CORS 프록시
+          '/api/proxy-csv': {
+            target: 'http://localhost:3002',
+            changeOrigin: true,
+            secure: false,
           }
         }
       },

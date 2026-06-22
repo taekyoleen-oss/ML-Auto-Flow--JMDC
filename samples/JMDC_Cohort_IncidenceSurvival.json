@@ -1,0 +1,93 @@
+{
+  "name": "JMDC-합성코호트 발생률·생존비교 데모 (J1→J2→J3→J4)",
+  "modules": [
+    {
+      "type": "JMDCCohortBuilder",
+      "position": {
+        "x": 50,
+        "y": 200
+      },
+      "name": "코호트 빌더",
+      "parameters": {
+        "data_source": "synthetic",
+        "synthetic_n": 100000,
+        "synthetic_seed": 43,
+        "index_date_rule": "birthday_age",
+        "index_age": 50,
+        "index_fixed_date": "2018-01-01",
+        "age_at_index_min": 30,
+        "age_at_index_max": 70,
+        "washout_years": 2,
+        "exclusion_diseases": ["C00-C97"],
+        "disease_free_years": 0
+      }
+    },
+    {
+      "type": "JMDCOutcomeLabeler",
+      "position": {
+        "x": 400,
+        "y": 200
+      },
+      "name": "아웃컴 라벨러",
+      "parameters": {
+        "outcome_diseases": {
+          "colon_ca": ["C18", "C19", "C20"],
+          "stroke": ["I60", "I61", "I62", "I63", "I64"],
+          "ami": ["I21", "I22"],
+          "diabetes": ["E10", "E11", "E12", "E13", "E14"]
+        },
+        "outcome_window_years": 5,
+        "confirm_suspect_flag": true,
+        "multi_outcome_mode": "single"
+      }
+    },
+    {
+      "type": "JMDCIncidenceRate",
+      "position": {
+        "x": 750,
+        "y": 80
+      },
+      "name": "발생률",
+      "parameters": {
+        "stratify_by": "sex_age",
+        "standard_population": "japan_2015",
+        "rate_unit": "1000_PY",
+        "time_grid_years": [1, 2, 3, 4, 5]
+      }
+    },
+    {
+      "type": "JMDCSurvivalCompare",
+      "position": {
+        "x": 750,
+        "y": 320
+      },
+      "name": "생존 비교",
+      "parameters": {
+        "group_col": "has_diabetes",
+        "time_horizons_years": [1, 3, 5, 10],
+        "logrank_method": "standard",
+        "stratify_cols": []
+      }
+    }
+  ],
+  "connections": [
+    {
+      "fromModuleIndex": 0,
+      "fromPort": "data_out",
+      "toModuleIndex": 1,
+      "toPort": "data_in"
+    },
+    {
+      "fromModuleIndex": 1,
+      "fromPort": "data_out",
+      "toModuleIndex": 2,
+      "toPort": "data_in"
+    },
+    {
+      "fromModuleIndex": 1,
+      "fromPort": "data_out",
+      "toModuleIndex": 3,
+      "toPort": "data_in"
+    }
+  ]
+}

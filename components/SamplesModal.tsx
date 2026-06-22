@@ -24,6 +24,15 @@ interface Sample {
   category?: string;
   appSection?: string;
   developerEmail?: string;
+  // --- 메타데이터 스키마 강화 (추가 필드, 모두 선택적/하위호환) ---
+  /** 분류용 태그 (작은 chip으로 표시) */
+  tags?: string[];
+  /** 입력 데이터 파일 경로/명 (예: verify/datasets/imports-85-hdrs.csv) */
+  dataFile?: string;
+  /** 사람이 읽을 수 있는 핵심 결과 요약 (예: "R²≈0.76", "Accuracy≈0.83") */
+  expectedOutput?: string;
+  /** 모델/태스크 요약 (예: "선형회귀 (회귀)", "K-Means (군집)") */
+  modelOrTask?: string;
 }
 
 interface SamplesModalProps {
@@ -40,6 +49,10 @@ interface SamplesModalProps {
     category?: string;
     appSection?: string;
     developerEmail?: string;
+    tags?: string[];
+    dataFile?: string;
+    expectedOutput?: string;
+    modelOrTask?: string;
   }>;
   onLoadSample: (
     sampleName: string,
@@ -446,10 +459,40 @@ const SamplesModal: React.FC<SamplesModalProps> = ({
                         <span className="text-gray-600 dark:text-gray-400 text-sm font-medium">입력데이터: </span>
                         <span className="text-gray-900 dark:text-white text-sm">{sample.inputData || "N/A"}</span>
                       </div>
+                      {(sample as Sample).modelOrTask && (
+                        <div>
+                          <span className="text-gray-600 dark:text-gray-400 text-sm font-medium">모델/태스크: </span>
+                          <span className="text-gray-900 dark:text-white text-sm">{(sample as Sample).modelOrTask}</span>
+                        </div>
+                      )}
+                      {(sample as Sample).dataFile && (
+                        <div>
+                          <span className="text-gray-600 dark:text-gray-400 text-sm font-medium">데이터 파일: </span>
+                          <span className="text-gray-900 dark:text-white text-sm break-all">{(sample as Sample).dataFile}</span>
+                        </div>
+                      )}
+                      {(sample as Sample).expectedOutput && (
+                        <div>
+                          <span className="text-gray-600 dark:text-gray-400 text-sm font-medium">예상 결과: </span>
+                          <span className="text-gray-900 dark:text-white text-sm font-mono">{(sample as Sample).expectedOutput}</span>
+                        </div>
+                      )}
                       <div>
                         <span className="text-gray-600 dark:text-gray-400 text-sm font-medium">모델 설명:</span>
                         <p className="text-gray-700 dark:text-gray-300 text-sm mt-1 line-clamp-3">{sample.description || "설명 없음"}</p>
                       </div>
+                      {Array.isArray((sample as Sample).tags) && (sample as Sample).tags!.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {(sample as Sample).tags!.map((tag) => (
+                            <span
+                              key={tag}
+                              className="inline-block px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 text-xs font-medium"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <button
                       onClick={() => handleLoad(sample as Sample)}

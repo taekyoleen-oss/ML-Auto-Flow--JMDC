@@ -2,8 +2,10 @@ import React, { useState, useMemo } from 'react';
 import { CodeBracketIcon, ClipboardIcon, CheckIcon } from './icons';
 import { CanvasModule, Connection } from '../types';
 import { generateFullPipelineCode } from '../utils/generatePipelineCode';
+import { generateScoringCode, inspectScoringPipeline, type ScoringFramework } from '../utils/scoringExport';
 import { useTheme } from '../contexts/ThemeContext';
 import { runPythonWithOutputWorker, cancelWorkerRun, setWorkerStatusCallback } from '../utils/pyodideWorkerBridge';
+import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
 
 interface PipelineCodePanelProps {
     modules: CanvasModule[];
@@ -54,6 +56,28 @@ export const PipelineCodePanel: React.FC<PipelineCodePanelProps> = ({
     const [showOutput, setShowOutput] = useState(false);
     const [showTips, setShowTips] = useState(false);
     const [tracebackExpanded, setTracebackExpanded] = useState(false);
+
+    // 스코어링 코드 내보내기 (작업 6) — 전체 코드와는 별개의 '추가' 보기
+    const [showScoring, setShowScoring] = useState(false);
+    const [scoringFramework, setScoringFramework] = useState<ScoringFramework>('fastapi');
+    const [scoringCopied, setScoringCopied] = useState(false);
+    const scoringInfo = useMemo(
+        () => inspectScoringPipeline(modules, connections),
+        [modules, connections]
+    );
+    const scoringCode = useMemo(
+        () => generateScoringCode(modules, connections, scoringFramework),
+        [modules, connections, scoringFramework]
+    );
+    const handleCopyScoring = async () => {
+        try {
+            await navigator.clipboard.writeText(scoringCode);
+            setScoringCopied(true);
+            setTimeout(() => setScoringCopied(false), 2000);
+        } catch (err) {
+            console.error('Failed to copy scoring code:', err);
+        }
+    };
 
     // 표시용 코드 (pd.read_csv 포함 - 외부 실행 가능한 형태)
     const [codeGenError, setCodeGenError] = React.useState<string | null>(null);
@@ -204,6 +228,21 @@ export const PipelineCodePanel: React.FC<PipelineCodePanelProps> = ({
                         <span>📓</span>
                         <span>.ipynb</span>
                     </button>
+                    <AdvancedOnly>
+                        <button
+                            onClick={() => setShowScoring((v) => !v)}
+                            className={`flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                showScoring
+                                    ? 'bg-teal-600 text-white hover:bg-teal-700'
+                                    : 'bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 hover:bg-teal-200 dark:hover:bg-teal-800/60'
+                            } ${ADVANCED_BTN_DIM}`}
+                            title="배포용 스코어링 코드(joblib + FastAPI/Flask) 내보내기 (고급기능)"
+                        >
+                            <AdvancedLockBadge className="text-[10px] leading-none" />
+                            <span>🚀</span>
+                            <span>스코어링</span>
+                        </button>
+                    </AdvancedOnly>
                     {isRunning ? (
                         <button
                             onClick={handleCancel}
@@ -264,12 +303,69 @@ export const PipelineCodePanel: React.FC<PipelineCodePanelProps> = ({
                 </div>
             )}
 
-            {/* 코드 영역 */}
-            <div className="flex-1 overflow-auto p-3 min-h-0">
-                <pre className="bg-gray-100 dark:bg-gray-900 p-3 rounded-md overflow-x-auto text-xs font-mono text-gray-900 dark:text-gray-200 whitespace-pre-wrap">
-                    <code>{fullPipelineCode}</code>
-                </pre>
-            </div>
+            {/* 스코어링 코드 내보내기 패널 (고급기능) */}
+            {showScoring ? (
+                <AdvancedOnly>
+                    <div className="flex-1 overflow-auto p-3 min-h-0 flex flex-col">
+                        <div className="flex-shrink-0 mb-2">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-bold text-teal-700 dark:text-teal-300 flex items-center gap-1">
+                                    🚀 배포용 스코어링 코드
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                    <div className="flex rounded-md overflow-hidden border border-teal-300 dark:border-teal-700">
+                                        {(['fastapi', 'flask'] as ScoringFramework[]).map((fw) => (
+                                            <button
+                                                key={fw}
+                                                onClick={() => setScoringFramework(fw)}
+                                                className={`px-2 py-1 text-[10px] font-semibold transition-colors ${
+                                                    scoringFramework === fw
+                                                        ? 'bg-teal-600 text-white'
+                                                        : 'bg-white dark:bg-gray-800 text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900/40'
+                                                }`}
+                                            >
+                                                {fw === 'fastapi' ? 'FastAPI' : 'Flask'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <button
+                                        onClick={handleCopyScoring}
+                                        className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors"
+                                        title="스코어링 코드 복사"
+                                    >
+                                        {scoringCopied ? (
+                                            <CheckIcon className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                        ) : (
+                                            <ClipboardIcon className="w-4 h-4 text-gray-700 dark:text-gray-300" />
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                            {!scoringInfo.available ? (
+                                <div className="px-2 py-1.5 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-md mb-2">
+                                    <p className="text-[11px] text-yellow-700 dark:text-yellow-300">
+                                        ⚠️ {scoringInfo.reason}
+                                    </p>
+                                </div>
+                            ) : (
+                                <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-2">
+                                    학습 모델 → joblib 저장 + {scoringFramework === 'fastapi' ? 'FastAPI' : 'Flask'} 엔드포인트 + 요청/응답 JSON 샘플을 생성합니다.
+                                </p>
+                            )}
+                        </div>
+                        <pre className="flex-1 bg-gray-100 dark:bg-gray-900 p-3 rounded-md overflow-auto text-xs font-mono text-gray-900 dark:text-gray-200 whitespace-pre-wrap min-h-0">
+                            <code>{scoringCode}</code>
+                        </pre>
+                    </div>
+                </AdvancedOnly>
+            ) : (
+                /* 코드 영역 */
+                <div className="flex-1 overflow-auto p-3 min-h-0">
+                    <pre className="bg-gray-100 dark:bg-gray-900 p-3 rounded-md overflow-x-auto text-xs font-mono text-gray-900 dark:text-gray-200 whitespace-pre-wrap">
+                        <code>{fullPipelineCode}</code>
+                    </pre>
+                </div>
+            )}
 
             {/* 출력 영역 */}
             {showOutput && (

@@ -1089,6 +1089,491 @@
     }
   },
   {
+    "filename": "Book_AdultIncome_DecisionTree.json",
+    "name": "book-Ch3 adult census income (DecisionTree classification)",
+    "inputData": "verify/datasets/adult.csv (UCI Adult Census Income)",
+    "description": "[Azure ML 책 Ch3] 인구통계로 소득(>50K) 분류 — 의사결정나무(max_depth=8). 책의 Boosted Decision Tree 대체.",
+    "category": "머신러닝",
+    "data": {
+      "name": "book-Ch3 adult census income (DecisionTree classification)",
+      "modules": [
+        {
+          "type": "LoadData",
+          "name": "Load",
+          "parameters": {
+            "source": "adult.csv"
+          },
+          "position": {
+            "x": 50,
+            "y": 50
+          }
+        },
+        {
+          "type": "SplitData",
+          "name": "Split",
+          "parameters": {
+            "train_size": 0.8,
+            "random_state": 42,
+            "shuffle": "True",
+            "stratify": "False",
+            "stratify_column": null
+          },
+          "position": {
+            "x": 380,
+            "y": 50
+          }
+        },
+        {
+          "type": "DecisionTree",
+          "name": "Tree",
+          "parameters": {
+            "model_purpose": "classification",
+            "criterion": "gini",
+            "max_depth": 8,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1
+          },
+          "position": {
+            "x": 50,
+            "y": 320
+          }
+        },
+        {
+          "type": "TrainModel",
+          "name": "Train",
+          "parameters": {
+            "feature_columns": [
+              "age",
+              "fnlwgt",
+              "education-num",
+              "capital-gain",
+              "capital-loss",
+              "hours-per-week"
+            ],
+            "label_column": "income"
+          },
+          "position": {
+            "x": 380,
+            "y": 320
+          }
+        },
+        {
+          "type": "ScoreModel",
+          "name": "Score",
+          "parameters": {},
+          "position": {
+            "x": 720,
+            "y": 320
+          }
+        },
+        {
+          "type": "EvaluateModel",
+          "name": "Eval",
+          "parameters": {
+            "model_type": "classification",
+            "label_column": "income",
+            "prediction_column": "Predict",
+            "threshold": 0.5
+          },
+          "position": {
+            "x": 1060,
+            "y": 320
+          }
+        }
+      ],
+      "connections": [
+        {
+          "fromModuleIndex": 0,
+          "fromPort": "data_out",
+          "toModuleIndex": 1,
+          "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 1,
+          "fromPort": "train_data_out",
+          "toModuleIndex": 3,
+          "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 2,
+          "fromPort": "model_out",
+          "toModuleIndex": 3,
+          "toPort": "model_in"
+        },
+        {
+          "fromModuleIndex": 3,
+          "fromPort": "trained_model_out",
+          "toModuleIndex": 4,
+          "toPort": "model_in"
+        },
+        {
+          "fromModuleIndex": 1,
+          "fromPort": "test_data_out",
+          "toModuleIndex": 4,
+          "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 4,
+          "fromPort": "scored_data_out",
+          "toModuleIndex": 5,
+          "toPort": "data_in"
+        }
+      ]
+    }
+  },
+  {
+    "filename": "Book_Automobile_LinearRegression.json",
+    "name": "book-Ch5 automobile price (LinearRegression)",
+    "inputData": "verify/datasets/imports-85-hdrs.csv (UCI Automobile)",
+    "description": "[Azure ML 책 Ch5] 자동차 특성으로 가격 예측 — 선형회귀. 수치형 10개 특성, train 0.75, seed 42.",
+    "category": "머신러닝",
+    "data": {
+      "name": "book-Ch5 automobile price (LinearRegression)",
+      "modules": [
+        {
+          "type": "LoadData",
+          "name": "Load",
+          "parameters": {
+            "source": "imports-85-hdrs.csv"
+          },
+          "position": {
+            "x": 50,
+            "y": 50
+          }
+        },
+        {
+          "type": "SplitData",
+          "name": "Split",
+          "parameters": {
+            "train_size": 0.75,
+            "random_state": 42,
+            "shuffle": "True",
+            "stratify": "False",
+            "stratify_column": null
+          },
+          "position": {
+            "x": 380,
+            "y": 50
+          }
+        },
+        {
+          "type": "LinearRegression",
+          "name": "LinReg",
+          "parameters": {
+            "model_type": "LinearRegression",
+            "alpha": 1,
+            "l1_ratio": 0.5,
+            "fit_intercept": "True"
+          },
+          "position": {
+            "x": 50,
+            "y": 320
+          }
+        },
+        {
+          "type": "TrainModel",
+          "name": "Train",
+          "parameters": {
+            "feature_columns": [
+              "symboling",
+              "wheel-base",
+              "length",
+              "width",
+              "height",
+              "curb-weight",
+              "engine-size",
+              "compression-ratio",
+              "city-mpg",
+              "highway-mpg"
+            ],
+            "label_column": "price"
+          },
+          "position": {
+            "x": 380,
+            "y": 320
+          }
+        },
+        {
+          "type": "ScoreModel",
+          "name": "Score",
+          "parameters": {},
+          "position": {
+            "x": 720,
+            "y": 320
+          }
+        },
+        {
+          "type": "EvaluateModel",
+          "name": "Eval",
+          "parameters": {
+            "model_type": "regression",
+            "label_column": "price",
+            "prediction_column": "Predict",
+            "threshold": 0.5
+          },
+          "position": {
+            "x": 1060,
+            "y": 320
+          }
+        }
+      ],
+      "connections": [
+        {
+          "fromModuleIndex": 0,
+          "fromPort": "data_out",
+          "toModuleIndex": 1,
+          "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 1,
+          "fromPort": "train_data_out",
+          "toModuleIndex": 3,
+          "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 2,
+          "fromPort": "model_out",
+          "toModuleIndex": 3,
+          "toPort": "model_in"
+        },
+        {
+          "fromModuleIndex": 3,
+          "fromPort": "trained_model_out",
+          "toModuleIndex": 4,
+          "toPort": "model_in"
+        },
+        {
+          "fromModuleIndex": 1,
+          "fromPort": "test_data_out",
+          "toModuleIndex": 4,
+          "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 4,
+          "fromPort": "scored_data_out",
+          "toModuleIndex": 5,
+          "toPort": "data_in"
+        }
+      ]
+    }
+  },
+  {
+    "filename": "Book_Wholesale_KMeans.json",
+    "name": "book-Ch6 wholesale customers (KMeans, 4 centroids)",
+    "inputData": "verify/datasets/wholesale_customers.csv (UCI Wholesale customers)",
+    "description": "[Azure ML 책 Ch6] 도매고객 세분화 — K-Means(centroid 4). 책과 동일 군집 수.",
+    "category": "머신러닝",
+    "data": {
+      "name": "book-Ch6 wholesale customers (KMeans, 4 centroids)",
+      "modules": [
+        {
+          "type": "LoadData",
+          "name": "Load",
+          "parameters": {
+            "source": "wholesale_customers.csv"
+          },
+          "position": {
+            "x": 50,
+            "y": 50
+          }
+        },
+        {
+          "type": "KMeans",
+          "name": "KMeans",
+          "parameters": {
+            "n_clusters": 4,
+            "init": "k-means++",
+            "n_init": 10,
+            "max_iter": 300,
+            "random_state": 42
+          },
+          "position": {
+            "x": 50,
+            "y": 320
+          }
+        },
+        {
+          "type": "TrainClusteringModel",
+          "name": "TrainCluster",
+          "parameters": {
+            "feature_columns": []
+          },
+          "position": {
+            "x": 380,
+            "y": 180
+          }
+        },
+        {
+          "type": "ClusteringData",
+          "name": "AssignClusters",
+          "parameters": {},
+          "position": {
+            "x": 720,
+            "y": 180
+          }
+        }
+      ],
+      "connections": [
+        {
+          "fromModuleIndex": 0,
+          "fromPort": "data_out",
+          "toModuleIndex": 2,
+          "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 1,
+          "fromPort": "model_out",
+          "toModuleIndex": 2,
+          "toPort": "model_in"
+        },
+        {
+          "fromModuleIndex": 2,
+          "fromPort": "trained_model_out",
+          "toModuleIndex": 3,
+          "toPort": "model_in"
+        },
+        {
+          "fromModuleIndex": 0,
+          "fromPort": "data_out",
+          "toModuleIndex": 3,
+          "toPort": "data_in"
+        }
+      ]
+    }
+  },
+  {
+    "filename": "JMDC_Cohort_IncidenceSurvival.json",
+    "name": "JMDC-합성코호트 발생률·생존비교 데모 (J1→J2→J3→J4)",
+    "inputData": "data/jmdc_synthetic/cohort_ready.csv (JMDC 합성 코호트; 모듈 기본은 synthetic 생성기 seed 43)",
+    "description": "[JMDC 전용] J1 코호트 빌더→J2 아웃컴 라벨러→(J3 발생률 + J4 생존 비교) 헬스케어 코호트 데모. Index Date(만 50세) 기준, 2년 washout, 5년 아웃컴 윈도우. has_diabetes 군별 생존 비교(log-rank). Pyodide 런타임 실행 모듈로 standalone 전체코드는 설정 출력 위주(verify 픽스처 범위 외).",
+    "category": "머신러닝",
+    "data": {
+      "name": "JMDC-합성코호트 발생률·생존비교 데모 (J1→J2→J3→J4)",
+      "modules": [
+        {
+          "type": "JMDCCohortBuilder",
+          "position": {
+            "x": 50,
+            "y": 200
+          },
+          "name": "코호트 빌더",
+          "parameters": {
+            "data_source": "synthetic",
+            "synthetic_n": 100000,
+            "synthetic_seed": 43,
+            "index_date_rule": "birthday_age",
+            "index_age": 50,
+            "index_fixed_date": "2018-01-01",
+            "age_at_index_min": 30,
+            "age_at_index_max": 70,
+            "washout_years": 2,
+            "exclusion_diseases": [
+              "C00-C97"
+            ],
+            "disease_free_years": 0
+          }
+        },
+        {
+          "type": "JMDCOutcomeLabeler",
+          "position": {
+            "x": 400,
+            "y": 200
+          },
+          "name": "아웃컴 라벨러",
+          "parameters": {
+            "outcome_diseases": {
+              "colon_ca": [
+                "C18",
+                "C19",
+                "C20"
+              ],
+              "stroke": [
+                "I60",
+                "I61",
+                "I62",
+                "I63",
+                "I64"
+              ],
+              "ami": [
+                "I21",
+                "I22"
+              ],
+              "diabetes": [
+                "E10",
+                "E11",
+                "E12",
+                "E13",
+                "E14"
+              ]
+            },
+            "outcome_window_years": 5,
+            "confirm_suspect_flag": true,
+            "multi_outcome_mode": "single"
+          }
+        },
+        {
+          "type": "JMDCIncidenceRate",
+          "position": {
+            "x": 750,
+            "y": 80
+          },
+          "name": "발생률",
+          "parameters": {
+            "stratify_by": "sex_age",
+            "standard_population": "japan_2015",
+            "rate_unit": "1000_PY",
+            "time_grid_years": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ]
+          }
+        },
+        {
+          "type": "JMDCSurvivalCompare",
+          "position": {
+            "x": 750,
+            "y": 320
+          },
+          "name": "생존 비교",
+          "parameters": {
+            "group_col": "has_diabetes",
+            "time_horizons_years": [
+              1,
+              3,
+              5,
+              10
+            ],
+            "logrank_method": "standard",
+            "stratify_cols": []
+          }
+        }
+      ],
+      "connections": [
+        {
+          "fromModuleIndex": 0,
+          "fromPort": "data_out",
+          "toModuleIndex": 1,
+          "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 1,
+          "fromPort": "data_out",
+          "toModuleIndex": 2,
+          "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 1,
+          "fromPort": "data_out",
+          "toModuleIndex": 3,
+          "toPort": "data_in"
+        }
+      ]
+    }
+  },
+  {
     "filename": "Linear_Reg in Boston.ins",
     "name": "Linear_Reg in Boston",
     "inputData": "Boston House",

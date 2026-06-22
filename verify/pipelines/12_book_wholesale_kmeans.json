@@ -1,0 +1,15 @@
+{
+  "name": "book-Ch6 wholesale customers (KMeans, 4 centroids)",
+  "modules": [
+    { "type": "LoadData", "name": "Load", "parameters": { "source": "wholesale_customers.csv" } },
+    { "type": "KMeans", "name": "KMeans", "parameters": { "n_clusters": 4, "init": "k-means++", "n_init": 10, "max_iter": 300, "random_state": 42 } },
+    { "type": "TrainClusteringModel", "name": "TrainCluster", "parameters": { "feature_columns": [] } },
+    { "type": "ClusteringData", "name": "AssignClusters", "parameters": {} }
+  ],
+  "connections": [
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 2, "toPort": "data_in" },
+    { "fromModuleIndex": 1, "fromPort": "model_out", "toModuleIndex": 2, "toPort": "model_in" },
+    { "fromModuleIndex": 2, "fromPort": "trained_model_out", "toModuleIndex": 3, "toPort": "model_in" },
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 3, "toPort": "data_in" }
+  ]
+}

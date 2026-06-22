@@ -1,0 +1,19 @@
+{
+  "name": "book-Ch5 automobile price (LinearRegression)",
+  "modules": [
+    { "type": "LoadData", "name": "Load", "parameters": { "source": "imports-85-hdrs.csv" } },
+    { "type": "SplitData", "name": "Split", "parameters": { "train_size": 0.75, "random_state": 42, "shuffle": "True", "stratify": "False", "stratify_column": null } },
+    { "type": "LinearRegression", "name": "LinReg", "parameters": { "model_type": "LinearRegression", "alpha": 1, "l1_ratio": 0.5, "fit_intercept": "True" } },
+    { "type": "TrainModel", "name": "Train", "parameters": { "feature_columns": ["symboling","wheel-base","length","width","height","curb-weight","engine-size","compression-ratio","city-mpg","highway-mpg"], "label_column": "price" } },
+    { "type": "ScoreModel", "name": "Score", "parameters": {} },
+    { "type": "EvaluateModel", "name": "Eval", "parameters": { "model_type": "regression", "label_column": "price", "prediction_column": "Predict", "threshold": 0.5 } }
+  ],
+  "connections": [
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 1, "toPort": "data_in" },
+    { "fromModuleIndex": 1, "fromPort": "train_data_out", "toModuleIndex": 3, "toPort": "data_in" },
+    { "fromModuleIndex": 2, "fromPort": "model_out", "toModuleIndex": 3, "toPort": "model_in" },
+    { "fromModuleIndex": 3, "fromPort": "trained_model_out", "toModuleIndex": 4, "toPort": "model_in" },
+    { "fromModuleIndex": 1, "fromPort": "test_data_out", "toModuleIndex": 4, "toPort": "data_in" },
+    { "fromModuleIndex": 4, "fromPort": "scored_data_out", "toModuleIndex": 5, "toPort": "data_in" }
+  ]
+}

@@ -25,6 +25,7 @@ import {
 import { GoogleGenAI } from "@google/genai";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { SpreadViewModal } from "./SpreadViewModal";
+import { DataOverviewPanel } from "./DataOverviewPanel";
 
 interface DataPreviewModalProps {
     module: CanvasModule;
@@ -2654,20 +2655,35 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
                   );
                 })()
               ) : !isPrepModule && !isJoinConcatModule ? (
-                <div className="flex justify-between items-center flex-shrink-0">
-                  <div className="text-sm text-gray-600">
-                    Showing {Math.min(rows.length, 1000)} of{" "}
-                    {(
-                      data?.totalRowCount ??
-                      data?.rows?.length ??
-                      0
-                    ).toLocaleString()}{" "}
-                    rows and {columns.length} columns. Click a column to see
-                    details.
+                <>
+                  <DataOverviewPanel
+                    columns={columns}
+                    rows={rows}
+                    totalRowCount={data?.totalRowCount ?? data?.rows?.length}
+                  />
+                  <div className="flex justify-between items-center flex-shrink-0">
+                    <div className="text-sm text-gray-600">
+                      Showing {Math.min(rows.length, 1000)} of{" "}
+                      {(
+                        data?.totalRowCount ??
+                        data?.rows?.length ??
+                        0
+                      ).toLocaleString()}{" "}
+                      rows and {columns.length} columns. Click a column to see
+                      details.
                                 </div>
                             </div>
+                </>
               ) : !isJoinConcatModule ? (
-                            <div className="flex justify-between items-center flex-shrink-0">
+                <>
+                  <DataOverviewPanel
+                    columns={currentColumns}
+                    rows={currentRows}
+                    totalRowCount={
+                      currentData?.totalRowCount ?? currentRows.length
+                    }
+                  />
+                  <div className="flex justify-between items-center flex-shrink-0">
                                 <div className="text-sm text-gray-600">
                     Showing {Math.min(currentRows.length, 1000)} of{" "}
                     {(
@@ -2679,6 +2695,7 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
                     see details.
                                 </div>
                             </div>
+                </>
               ) : null}
               <div
                 className="flex-grow flex gap-4 overflow-hidden"

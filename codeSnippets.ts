@@ -2154,6 +2154,24 @@ export const getModuleCode = (
     return replacePlaceholders(code, module.parameters);
   }
 
+  // LoadData: URL 소스 전용 가산 분기 (Phase 4)
+  // sourceType === "url"일 때만 동작. 파일/로컬 소스는 아래 일반 경로로
+  // 떨어져 기존과 byte-identical한 코드를 생성한다(기존 분기 미수정).
+  if (module.type === "LoadData" && module.parameters?.sourceType === "url") {
+    const rawUrl = String(module.parameters.source ?? "");
+    const safeUrl = rawUrl.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    return [
+      "import pandas as pd",
+      "",
+      "# CSV를 URL(원격)에서 직접 불러와 DataFrame으로 반환합니다.",
+      "# Parameters from UI (URL source)",
+      `file_path = '${safeUrl}'`,
+      "",
+      "# Execution",
+      "dataframe = pd.read_csv(file_path)",
+    ].join("\n");
+  }
+
   const template =
     templates[module.type] || `# Code for ${module.name} is not available.`;
   return replacePlaceholders(template.trim(), module.parameters);
