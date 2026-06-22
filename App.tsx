@@ -4376,6 +4376,60 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
             addLog("ERROR", `Python DataFiltering 실패: ${errorMessage}`);
             throw new Error(`데이터 필터링 실패: ${errorMessage}`);
           }
+        } else if (module.type === ModuleType.Recommender) {
+          const inputData = getSingleInputData(module.id) as DataPreview;
+          if (!inputData) throw new Error("Input data not available.");
+
+          const {
+            user_col = "",
+            item_col = "",
+            rating_col = "",
+            n_components = 2,
+            top_n = 5,
+          } = module.parameters;
+
+          if (!user_col || !item_col || !rating_col) {
+            throw new Error(
+              "User, Item, and Rating columns must all be selected."
+            );
+          }
+
+          // Pyodide를 사용하여 Python으로 협업 필터링 추천 수행 (NMF, random_state=42)
+          try {
+            addLog(
+              "INFO",
+              `Pyodide를 사용하여 Python으로 협업 필터링 추천 수행 중... (user=${user_col}, item=${item_col}, rating=${rating_col})`
+            );
+
+            const pyodideModule = await import("./utils/pyodideRunner");
+            const { runRecommenderPython } = pyodideModule;
+
+            const result = await runRecommenderPython(
+              inputData.rows || [],
+              user_col,
+              item_col,
+              rating_col,
+              Number(n_components) || 2,
+              Number(top_n) || 5,
+              60000 // 타임아웃: 60초
+            );
+
+            newOutputData = {
+              type: "DataPreview",
+              columns: result.columns,
+              totalRowCount: result.rows.length,
+              rows: result.rows,
+            };
+
+            addLog(
+              "SUCCESS",
+              `Python으로 추천 완료: ${result.rows.length}건 추천 생성`
+            );
+          } catch (error: any) {
+            const errorMessage = error.message || String(error);
+            addLog("ERROR", `Python Recommender 실패: ${errorMessage}`);
+            throw new Error(`추천 수행 실패: ${errorMessage}`);
+          }
         } else if (module.type === ModuleType.ColumnPlot) {
           const inputData = getSingleInputData(module.id) as DataPreview;
           if (!inputData) throw new Error("Input data not available.");

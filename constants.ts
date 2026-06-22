@@ -293,6 +293,13 @@ export const TOOLBOX_MODULES = [
     description:
       "Applies a trained clustering model to assign clusters or transform data.",
   },
+  {
+    type: ModuleType.Recommender,
+    name: "Recommender",
+    icon: UsersIcon,
+    description:
+      "Collaborative-filtering recommender (NMF matrix factorization) that outputs Top-N item suggestions per user from a long-format ratings table.",
+  },
 
   // Traditional Analysis - Statsmodels Models
   {
@@ -886,6 +893,21 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
         { name: "data_in", type: "data" },
       ],
       outputs: [{ name: "clustered_data_out", type: "data" }],
+    },
+    {
+      type: ModuleType.Recommender,
+      status: ModuleStatus.Pending,
+      parameters: {
+        // long-format 평점 테이블의 컬럼 매핑 (사용자/아이템/평점)
+        user_col: "user_id",
+        item_col: "item_id",
+        rating_col: "rating",
+        // NMF 잠재 요인 수 + 사용자별 추천 아이템 수
+        n_components: 2,
+        top_n: 5,
+      },
+      inputs: [{ name: "data_in", type: "data" }],
+      outputs: [{ name: "data_out", type: "data" }],
     },
     {
       type: ModuleType.TrainModel,

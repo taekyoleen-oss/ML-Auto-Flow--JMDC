@@ -17,7 +17,7 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.cluster import KMeans, DBSCAN
 from sklearn.cluster import AgglomerativeClustering
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, NMF
 from sklearn.metrics import accuracy_score, mean_squared_error, mean_absolute_error, r2_score, classification_report, confusion_matrix
 from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score, average_precision_score
 from sklearn.impute import SimpleImputer, KNNImputer
@@ -1686,6 +1686,85 @@ def pca_transform(df: pd.DataFrame, n_components: int = 2, feature_columns: list
     print(f"총 설명된 분산: {sum(explained_variance_ratio):.4f}")
     
     return df_transformed, explained_variance_ratio, pca
+
+
+def recommend_collaborative_filtering(df: pd.DataFrame, user_col: str, item_col: str,
+                                      rating_col: str, n_components: int = 2, top_n: int = 5):
+    """
+    협업 필터링 추천(행렬분해 기반)을 수행합니다.
+
+    codeSnippets.ts 의 Recommender 템플릿과 동작이 1:1 일치합니다(재현성 불변식).
+    Pyodide 가용 패키지 제약상 'surprise' 대신 sklearn.decomposition.NMF(행렬분해)를
+    사용하며 random_state=42 + init='nndsvda' 로 완전 결정적입니다.
+
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        long-format 평점 테이블 (한 행 = 한 사용자가 한 아이템에 매긴 평점)
+    user_col : str
+        사용자 식별 컬럼명
+    item_col : str
+        아이템 식별 컬럼명
+    rating_col : str
+        평점(선호도) 컬럼명
+    n_components : int
+        잠재 요인(latent factor) 수
+    top_n : int
+        사용자별 추천 아이템 수
+
+    Returns:
+    --------
+    pd.DataFrame
+        long-format 추천 결과 (user_col, rank, item_col, predicted_rating)
+    """
+    print(f"협업 필터링 추천 수행 중 (요인 수: {n_components}, Top-N: {top_n})...")
+
+    # 1) 중복 (user, item) 평점을 평균으로 합치고 user x item 행렬로 피벗
+    agg = df.groupby([user_col, item_col], as_index=False)[rating_col].mean()
+    matrix = agg.pivot(index=user_col, columns=item_col, values=rating_col)
+    # 입력 행 순서와 무관하게 결정적 정렬
+    matrix = matrix.sort_index(axis=0).sort_index(axis=1)
+
+    users = list(matrix.index)
+    items = list(matrix.columns)
+    R = matrix.to_numpy(dtype=float)
+    rated_mask = ~np.isnan(R)            # 이미 평가한 위치
+    R_filled = np.nan_to_num(R, nan=0.0)  # NMF는 비음수·NaN 없는 행렬 필요
+
+    # 2) NMF 행렬분해 (init='nndsvda' + random_state=42 => 완전 결정적)
+    n_comp = max(1, min(int(n_components), min(R_filled.shape)))
+    model = NMF(n_components=n_comp, init='nndsvda', random_state=42, max_iter=500)
+    W = model.fit_transform(R_filled)
+    H = model.components_
+    R_hat = W @ H                          # 복원(예측) 평점
+
+    # 3) 사용자별로 아직 평가하지 않은 아이템 중 예측 평점 상위 Top-N 추천
+    recs = []
+    for ui, u in enumerate(users):
+        scores = R_hat[ui].copy()
+        scores[rated_mask[ui]] = -np.inf   # 이미 평가한 아이템 제외
+        # 동점은 아이템 위치로 안정 정렬 → 버전 무관 재현
+        order = sorted(range(len(items)), key=lambda j: (-scores[j], j))
+        rank = 0
+        for j in order:
+            if not np.isfinite(scores[j]):
+                continue
+            rank += 1
+            recs.append({
+                user_col: u,
+                'rank': rank,
+                item_col: items[j],
+                'predicted_rating': round(float(R_hat[ui, j]), 4),
+            })
+            if rank >= int(top_n):
+                break
+
+    recommendations = pd.DataFrame(recs, columns=[user_col, 'rank', item_col, 'predicted_rating'])
+    recommendations = recommendations.sort_values([user_col, 'rank']).reset_index(drop=True)
+
+    print(f"추천 완료. {len(users)}명 사용자 x {len(items)}개 아이템 → {len(recommendations)}건 추천.")
+
+    return recommendations
 
 
 # ============================================================================

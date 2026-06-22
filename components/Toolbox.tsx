@@ -50,6 +50,7 @@ const analysisOpTypes = [
   ModuleType.EvaluateModel,
   ModuleType.TrainClusteringModel,
   ModuleType.ClusteringData,
+  ModuleType.Recommender,
 ];
 
 const supervisedLearningTypes = [

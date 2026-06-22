@@ -3,6 +3,7 @@ import { CodeBracketIcon, ClipboardIcon, CheckIcon } from './icons';
 import { CanvasModule, Connection } from '../types';
 import { generateFullPipelineCode } from '../utils/generatePipelineCode';
 import { generateScoringCode, inspectScoringPipeline, type ScoringFramework } from '../utils/scoringExport';
+import { generateRetrainSnapshotCode, inspectRetrainPipeline } from '../utils/retrainExport';
 import { useTheme } from '../contexts/ThemeContext';
 import { runPythonWithOutputWorker, cancelWorkerRun, setWorkerStatusCallback } from '../utils/pyodideWorkerBridge';
 import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
@@ -76,6 +77,29 @@ export const PipelineCodePanel: React.FC<PipelineCodePanelProps> = ({
             setTimeout(() => setScoringCopied(false), 2000);
         } catch (err) {
             console.error('Failed to copy scoring code:', err);
+        }
+    };
+
+    // 모델 버전 스냅샷 내보내기 (재학습/지속학습 3-7) — 가산적 '추가' 보기
+    const [showRetrain, setShowRetrain] = useState(false);
+    const [versionLabel, setVersionLabel] = useState('v1');
+    const [dataSourceRef, setDataSourceRef] = useState('');
+    const [retrainCopied, setRetrainCopied] = useState(false);
+    const retrainInfo = useMemo(
+        () => inspectRetrainPipeline(modules, connections),
+        [modules, connections]
+    );
+    const retrainCode = useMemo(
+        () => generateRetrainSnapshotCode(modules, connections, { versionLabel, dataSourceRef }),
+        [modules, connections, versionLabel, dataSourceRef]
+    );
+    const handleCopyRetrain = async () => {
+        try {
+            await navigator.clipboard.writeText(retrainCode);
+            setRetrainCopied(true);
+            setTimeout(() => setRetrainCopied(false), 2000);
+        } catch (err) {
+            console.error('Failed to copy retrain snapshot code:', err);
         }
     };
 
@@ -230,7 +254,7 @@ export const PipelineCodePanel: React.FC<PipelineCodePanelProps> = ({
                     </button>
                     <AdvancedOnly>
                         <button
-                            onClick={() => setShowScoring((v) => !v)}
+                            onClick={() => { setShowScoring((v) => !v); setShowRetrain(false); }}
                             className={`flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
                                 showScoring
                                     ? 'bg-teal-600 text-white hover:bg-teal-700'
@@ -241,6 +265,21 @@ export const PipelineCodePanel: React.FC<PipelineCodePanelProps> = ({
                             <AdvancedLockBadge className="text-[10px] leading-none" />
                             <span>🚀</span>
                             <span>스코어링</span>
+                        </button>
+                    </AdvancedOnly>
+                    <AdvancedOnly>
+                        <button
+                            onClick={() => { setShowRetrain((v) => !v); setShowScoring(false); }}
+                            className={`flex items-center gap-1 px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                showRetrain
+                                    ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                    : 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800/60'
+                            } ${ADVANCED_BTN_DIM}`}
+                            title="모델 버전 스냅샷(joblib + 버전 메타 JSON) 내보내기 — 재학습/지속학습 (고급기능)"
+                        >
+                            <AdvancedLockBadge className="text-[10px] leading-none" />
+                            <span>🗂️</span>
+                            <span>모델 버전</span>
                         </button>
                     </AdvancedOnly>
                     {isRunning ? (
@@ -303,8 +342,71 @@ export const PipelineCodePanel: React.FC<PipelineCodePanelProps> = ({
                 </div>
             )}
 
-            {/* 스코어링 코드 내보내기 패널 (고급기능) */}
-            {showScoring ? (
+            {/* 모델 버전 스냅샷 내보내기 패널 (재학습/지속학습 3-7, 고급기능) */}
+            {showRetrain ? (
+                <AdvancedOnly>
+                    <div className="flex-1 overflow-auto p-3 min-h-0 flex flex-col">
+                        <div className="flex-shrink-0 mb-2">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1">
+                                    🗂️ 모델 버전 스냅샷
+                                </span>
+                                <button
+                                    onClick={handleCopyRetrain}
+                                    className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors"
+                                    title="모델 버전 스냅샷 코드 복사"
+                                >
+                                    {retrainCopied ? (
+                                        <CheckIcon className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                    ) : (
+                                        <ClipboardIcon className="w-4 h-4 text-gray-700 dark:text-gray-300" />
+                                    )}
+                                </button>
+                            </div>
+                            {/* 지속학습 워크플로 안내 */}
+                            <div className="px-2 py-1.5 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-md mb-2">
+                                <p className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 mb-0.5">지속학습 워크플로</p>
+                                <p className="text-[11px] text-indigo-600 dark:text-indigo-400 leading-relaxed">
+                                    ① 파이프라인 불러오기 → ② LoadData 소스 교체(파일/URL) → ③ 다시 실행해 재학습 → ④ 아래 코드로 새 모델 버전 저장
+                                </p>
+                            </div>
+                            {/* 버전 라벨 / 데이터 소스 입력 (타임스탬프 자동생성 없음 — 재현성) */}
+                            <div className="flex items-center gap-2 mb-2">
+                                <label className="text-[11px] font-medium text-gray-600 dark:text-gray-400 flex-shrink-0">버전</label>
+                                <input
+                                    type="text"
+                                    value={versionLabel}
+                                    onChange={(e) => setVersionLabel(e.target.value)}
+                                    placeholder="v1"
+                                    className="w-20 px-2 py-1 text-[11px] font-mono rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                />
+                                <label className="text-[11px] font-medium text-gray-600 dark:text-gray-400 flex-shrink-0">데이터 소스</label>
+                                <input
+                                    type="text"
+                                    value={dataSourceRef}
+                                    onChange={(e) => setDataSourceRef(e.target.value)}
+                                    placeholder={retrainInfo.dataSourceRef || '(LoadData 자동 추론)'}
+                                    className="flex-1 min-w-0 px-2 py-1 text-[11px] rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                />
+                            </div>
+                            {!retrainInfo.available ? (
+                                <div className="px-2 py-1.5 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-md mb-2">
+                                    <p className="text-[11px] text-yellow-700 dark:text-yellow-300">
+                                        ⚠️ {retrainInfo.reason}
+                                    </p>
+                                </div>
+                            ) : (
+                                <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-2">
+                                    학습 모델 → joblib 버전 저장 + 버전 메타(JSON) + 로드/비교 코드를 생성합니다. 버전 라벨은 자동 타임스탬프가 아닌 입력값을 사용합니다.
+                                </p>
+                            )}
+                        </div>
+                        <pre className="flex-1 bg-gray-100 dark:bg-gray-900 p-3 rounded-md overflow-auto text-xs font-mono text-gray-900 dark:text-gray-200 whitespace-pre-wrap min-h-0">
+                            <code>{retrainCode}</code>
+                        </pre>
+                    </div>
+                </AdvancedOnly>
+            ) : showScoring ? (
                 <AdvancedOnly>
                     <div className="flex-1 overflow-auto p-3 min-h-0 flex flex-col">
                         <div className="flex-shrink-0 mb-2">

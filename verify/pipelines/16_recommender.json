@@ -1,0 +1,11 @@
+{
+  "name": "recommender-collaborative-filtering (ratings_small)",
+  "requires": ["sklearn"],
+  "modules": [
+    { "type": "LoadData", "name": "Load", "parameters": { "source": "ratings_small.csv" } },
+    { "type": "Recommender", "name": "Recommender", "parameters": { "user_col": "user_id", "item_col": "item_id", "rating_col": "rating", "n_components": 2, "top_n": 3 } }
+  ],
+  "connections": [
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 1, "toPort": "data_in" }
+  ]
+}

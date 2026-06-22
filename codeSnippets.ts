@@ -1160,6 +1160,70 @@ else:
 
 # clustered_data now contains original data plus cluster assignments / components.
 `,
+  Recommender: `
+import pandas as pd
+import numpy as np
+from sklearn.decomposition import NMF
+
+# This module is a SELF-CONTAINED collaborative-filtering recommender.
+# Input 'dataframe' is a LONG-format ratings table (one row = one user rated one item).
+# It builds a user x item matrix, factorizes it with NMF (deterministic, random_state=42),
+# reconstructs predicted ratings, and outputs the Top-N unseen items per user.
+# (NMF / TruncatedSVD are available in Pyodide's scikit-learn — 'surprise' is NOT.)
+# Healthcare / insurance cross-sell example: user_id=member, item_id=service/product, rating=engagement.
+# Parameters from UI
+p_user_col = {user_col}
+p_item_col = {item_col}
+p_rating_col = {rating_col}
+p_n_components = {n_components}
+p_top_n = {top_n}
+
+# 1) Collapse duplicate (user, item) pairs to their mean rating, then pivot to a matrix.
+agg = dataframe.groupby([p_user_col, p_item_col], as_index=False)[p_rating_col].mean()
+matrix = agg.pivot(index=p_user_col, columns=p_item_col, values=p_rating_col)
+# Deterministic ordering of users/items (independent of input row order).
+matrix = matrix.sort_index(axis=0).sort_index(axis=1)
+
+users = list(matrix.index)
+items = list(matrix.columns)
+R = matrix.to_numpy(dtype=float)
+rated_mask = ~np.isnan(R)            # True where the user already rated the item
+R_filled = np.nan_to_num(R, nan=0.0)  # NMF needs a non-negative, NaN-free matrix
+
+# 2) Factorize with NMF. 'nndsvda' init + fixed random_state=42 => fully deterministic.
+n_comp = max(1, min(int(p_n_components), min(R_filled.shape)))
+model = NMF(n_components=n_comp, init='nndsvda', random_state=42, max_iter=500)
+W = model.fit_transform(R_filled)
+H = model.components_
+R_hat = W @ H                          # reconstructed (predicted) ratings
+
+# 3) For each user, recommend the Top-N highest-scoring items they have NOT rated.
+recs = []
+for ui, u in enumerate(users):
+    scores = R_hat[ui].copy()
+    scores[rated_mask[ui]] = -np.inf   # exclude already-rated items
+    # Stable tie-break by item position keeps results reproducible across versions.
+    order = sorted(range(len(items)), key=lambda j: (-scores[j], j))
+    rank = 0
+    for j in order:
+        if not np.isfinite(scores[j]):
+            continue
+        rank += 1
+        recs.append({
+            p_user_col: u,
+            'rank': rank,
+            p_item_col: items[j],
+            'predicted_rating': round(float(R_hat[ui, j]), 4),
+        })
+        if rank >= int(p_top_n):
+            break
+
+recommendations = pd.DataFrame(recs, columns=[p_user_col, 'rank', p_item_col, 'predicted_rating'])
+recommendations = recommendations.sort_values([p_user_col, 'rank']).reset_index(drop=True)
+
+print(f"Recommender: {len(users)} users x {len(items)} items, {n_comp} components -> {len(recommendations)} recommendations.")
+# recommendations is a long-format DataFrame: one row per (user, recommended item).
+`,
   EvaluateModel: `
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,

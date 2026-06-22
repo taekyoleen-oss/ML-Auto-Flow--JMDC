@@ -53,6 +53,9 @@ export enum ModuleType {
   TrainClusteringModel = "TrainClusteringModel",
   ClusteringData = "ClusteringData",
 
+  // Recommendation (Collaborative Filtering)
+  Recommender = "Recommender",
+
   // Legacy/StatModels - Keeping for now
   StatModels = "StatModels",
   ResultModel = "ResultModel",

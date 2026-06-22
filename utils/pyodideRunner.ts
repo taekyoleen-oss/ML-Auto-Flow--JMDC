@@ -6201,6 +6201,167 @@ except Exception as e:
 }
 
 /**
+ * 협업 필터링 추천(NMF 행렬분해)을 Python으로 실행합니다.
+ * codeSnippets.ts 의 Recommender 템플릿 / data_analysis_modules.py 의
+ * recommend_collaborative_filtering 와 동작이 1:1 일치합니다(재현성 불변식).
+ * init='nndsvda' + random_state=42 로 완전 결정적입니다.
+ * 타임아웃: 60초
+ */
+export async function runRecommenderPython(
+  data: any[],
+  user_col: string,
+  item_col: string,
+  rating_col: string,
+  n_components: number = 2,
+  top_n: number = 5,
+  timeoutMs: number = 60000
+): Promise<{ rows: any[]; columns: Array<{ name: string; type: string }> }> {
+  try {
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    py.globals.set("js_data", data);
+    py.globals.set("js_user_col", user_col);
+    py.globals.set("js_item_col", item_col);
+    py.globals.set("js_rating_col", rating_col);
+    py.globals.set("js_n_components", n_components);
+    py.globals.set("js_top_n", top_n);
+
+    const code = `
+import pandas as pd
+import numpy as np
+import traceback
+from sklearn.decomposition import NMF
+
+try:
+    dataframe = pd.DataFrame(js_data.to_py())
+    p_user_col = str(js_user_col)
+    p_item_col = str(js_item_col)
+    p_rating_col = str(js_rating_col)
+    p_n_components = int(js_n_components)
+    p_top_n = int(js_top_n)
+
+    if p_user_col not in dataframe.columns or p_item_col not in dataframe.columns or p_rating_col not in dataframe.columns:
+        raise ValueError("user_col / item_col / rating_col must all exist in the data.")
+
+    # 1) (user, item) 중복 평점을 평균으로 합치고 user x item 행렬로 피벗
+    agg = dataframe.groupby([p_user_col, p_item_col], as_index=False)[p_rating_col].mean()
+    matrix = agg.pivot(index=p_user_col, columns=p_item_col, values=p_rating_col)
+    matrix = matrix.sort_index(axis=0).sort_index(axis=1)
+
+    users = list(matrix.index)
+    items = list(matrix.columns)
+    R = matrix.to_numpy(dtype=float)
+    rated_mask = ~np.isnan(R)
+    R_filled = np.nan_to_num(R, nan=0.0)
+
+    # 2) NMF 행렬분해 (init='nndsvda' + random_state=42 => 완전 결정적)
+    n_comp = max(1, min(p_n_components, min(R_filled.shape)))
+    model = NMF(n_components=n_comp, init='nndsvda', random_state=42, max_iter=500)
+    W = model.fit_transform(R_filled)
+    H = model.components_
+    R_hat = W @ H
+
+    # 3) 사용자별 미평가 아이템 중 예측 평점 상위 Top-N
+    recs = []
+    for ui, u in enumerate(users):
+        scores = R_hat[ui].copy()
+        scores[rated_mask[ui]] = -np.inf
+        order = sorted(range(len(items)), key=lambda j: (-scores[j], j))
+        rank = 0
+        for j in order:
+            if not np.isfinite(scores[j]):
+                continue
+            rank += 1
+            recs.append({
+                p_user_col: u,
+                'rank': rank,
+                p_item_col: items[j],
+                'predicted_rating': round(float(R_hat[ui, j]), 4),
+            })
+            if rank >= p_top_n:
+                break
+
+    recommendations = pd.DataFrame(recs, columns=[p_user_col, 'rank', p_item_col, 'predicted_rating'])
+    recommendations = recommendations.sort_values([p_user_col, 'rank']).reset_index(drop=True)
+
+    result_rows = recommendations.to_dict('records')
+    result_columns = [{'name': col, 'type': str(recommendations[col].dtype)} for col in recommendations.columns]
+    js_result = {'rows': result_rows, 'columns': result_columns}
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    js_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+`;
+
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python Recommender 실행 타임아웃 (60초 초과)"
+    );
+
+    const resultPyObj = py.globals.get("js_result");
+    if (!resultPyObj) {
+      throw new Error(
+        `Python Recommender error: Python code returned None or undefined.`
+      );
+    }
+
+    const result = fromPython(resultPyObj);
+
+    if (result && result.__error__) {
+      throw new Error(
+        `Python Recommender error:\n${
+          result.error_traceback || result.error_message
+        }`
+      );
+    }
+
+    if (!result.rows || !result.columns) {
+      throw new Error(
+        `Python Recommender error: Missing rows or columns in result.`
+      );
+    }
+
+    py.globals.delete("js_data");
+    py.globals.delete("js_user_col");
+    py.globals.delete("js_item_col");
+    py.globals.delete("js_rating_col");
+    py.globals.delete("js_n_components");
+    py.globals.delete("js_top_n");
+    py.globals.delete("js_result");
+
+    return {
+      rows: result.rows,
+      columns: result.columns,
+    };
+  } catch (error: any) {
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_user_col");
+        py.globals.delete("js_item_col");
+        py.globals.delete("js_rating_col");
+        py.globals.delete("js_n_components");
+        py.globals.delete("js_top_n");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python Recommender error: ${errorMessage}`);
+  }
+}
+
+/**
  * Join을 Python으로 실행합니다 (데이터 조인)
  * 타임아웃: 60초
  */

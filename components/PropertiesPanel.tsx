@@ -3635,6 +3635,60 @@ const renderParameters = (
           transform data. No parameters needed.
         </p>
       );
+    // Recommender: 협업 필터링 (사용자/아이템/평점 컬럼 매핑 + 요인 수 + Top-N)
+    case ModuleType.Recommender: {
+      const sourceData = getConnectedDataSource(module.id);
+      const allColumns = (sourceData?.columns || []).map((c) => c.name);
+
+      if (allColumns.length === 0) {
+        return (
+          <p className="text-sm text-gray-500">
+            Connect a long-format ratings data source (user_id, item_id, rating)
+            to configure.
+          </p>
+        );
+      }
+
+      return (
+        <>
+          <p className="text-xs text-gray-500 mb-2">
+            Map the long-format ratings columns, then choose the number of latent
+            factors and Top-N recommendations per user. NMF matrix factorization
+            (random_state=42) is deterministic.
+          </p>
+          <PropertySelect
+            label="User Column"
+            value={module.parameters.user_col || ""}
+            options={allColumns}
+            onChange={(v) => onParamChange("user_col", v)}
+          />
+          <PropertySelect
+            label="Item Column"
+            value={module.parameters.item_col || ""}
+            options={allColumns}
+            onChange={(v) => onParamChange("item_col", v)}
+          />
+          <PropertySelect
+            label="Rating Column"
+            value={module.parameters.rating_col || ""}
+            options={allColumns}
+            onChange={(v) => onParamChange("rating_col", v)}
+          />
+          <PropertyInput
+            label="Latent Factors (n_components)"
+            value={module.parameters.n_components ?? 2}
+            type="number"
+            onChange={(v) => onParamChange("n_components", v)}
+          />
+          <PropertyInput
+            label="Top-N per User"
+            value={module.parameters.top_n ?? 5}
+            type="number"
+            onChange={(v) => onParamChange("top_n", v)}
+          />
+        </>
+      );
+    }
     case ModuleType.LogisticRegression:
       return (
         <>

@@ -460,6 +460,17 @@ export const MODULE_DESCRIPTIONS: Partial<
     connections: "TrainClusteringModel → ClusteringData ←(data_in)데이터 → (시각화/후속 분석).",
     commonErrors: "DBSCAN·Hierarchical(transductive)은 새 데이터를 예측할 수 없어, 학습에 쓴 동일 데이터를 data_in에 연결해야 합니다(행 수 불일치 시 오류). KMeans/PCA는 새 데이터도 가능.",
   },
+  [ModuleType.Recommender]: {
+    title: "Recommender",
+    category: "추천 (협업 필터링)",
+    role: "long-format 평점 테이블에서 user×item 행렬을 만들고 NMF 행렬분해(random_state=42)로 미관측 평점을 복원해 사용자별 Top-N 아이템을 추천합니다. (책 Ch7 Matchbox Recommender 대응 — Pyodide 미지원 'surprise' 대신 sklearn NMF 사용)",
+    input: "data_in: long-format 평점 테이블(한 행 = 한 사용자의 한 아이템 평점).",
+    output: "추천 결과 DataFrame(user_col, rank, item_col, predicted_rating) — 일반 데이터 미리보기로 확인.",
+    parameters: "user_col · item_col · rating_col · n_components(잠재 요인 수, 기본 2) · top_n(사용자별 추천 수, 기본 5) · random_state=42(고정·결정적)",
+    whenToUse: "사용자-아이템 평점/선호 데이터로 추천 목록을 만들 때. 보험·헬스케어 교차판매(가입자→서비스/상품 추천) 시나리오에도 활용.",
+    connections: "LoadData(평점 테이블) → (data_in)Recommender → 데이터 미리보기.",
+    commonErrors: "입력은 wide(피벗된) 행렬이 아니라 long-format(user_id, item_id, rating 3열)이어야 합니다. 컬럼 매핑이 비어 있으면 실행되지 않습니다. n_components는 사용자 수·아이템 수보다 작아야 의미가 있습니다.",
+  },
 
   // ===== Stat Models (Traditional) =====
   [ModuleType.StatModels]: {
