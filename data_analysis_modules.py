@@ -159,6 +159,8 @@ def select_data(df: pd.DataFrame, columns: list):
     pd.DataFrame
         선택된 컬럼만 포함하는 데이터프레임
     """
+    if not columns:  # 선택이 비어 있으면 전체 컬럼을 통과시킨다 (빈 선택 = passthrough)
+        columns = list(df.columns)
     print(f"컬럼 선택: {columns}")
     selected_df = df[columns].copy()
     print(f"선택 완료. Shape: {selected_df.shape}")

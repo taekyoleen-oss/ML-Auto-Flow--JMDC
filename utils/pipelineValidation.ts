@@ -102,10 +102,19 @@ export function validateModuleParameters(module: CanvasModule): string | null {
 
     case 'SelectData': {
       const sel = p.columnSelections || p.selectedColumns || p.columns;
-      const hasSelection = sel && (
-        (Array.isArray(sel) && sel.length > 0) ||
-        (typeof sel === 'object' && Object.values(sel).some(Boolean))
-      );
+      // 빈/미설정 columnSelections는 "전체 컬럼 통과(passthrough)"로 유효 처리한다.
+      // (인앱 실행 분기와 내보낸 select_data() 모두 빈 선택을 전체 컬럼 통과로 처리하므로 정합)
+      const isEmpty =
+        !sel ||
+        (Array.isArray(sel) && sel.length === 0) ||
+        (typeof sel === 'object' && !Array.isArray(sel) && Object.keys(sel).length === 0);
+      if (isEmpty) break;
+      // 설정된 경우에만: 최소 1개 컬럼이 선택(selected !== false)되어 있어야 한다.
+      const hasSelection = Array.isArray(sel)
+        ? sel.length > 0
+        : Object.values(sel).some(
+            (v: any) => v && (v === true || v.selected !== false)
+          );
       if (!hasSelection)
         return '출력할 컬럼을 1개 이상 선택해야 합니다.';
       break;
