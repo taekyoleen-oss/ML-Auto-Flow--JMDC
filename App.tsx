@@ -5387,6 +5387,34 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
             addLog("ERROR", `Python NormalizeData 실패: ${errorMessage}`);
             throw new Error(`정규화 실패: ${errorMessage}`);
           }
+        } else if (module.type === ModuleType.PythonScript) {
+          const inputData = getSingleInputData(module.id) as DataPreview;
+          if (!inputData) throw new Error("Input data not available.");
+
+          const code =
+            (module.parameters.code as string) || "scripted_data = dataframe";
+
+          try {
+            addLog("INFO", "Pyodide 샌드박스에서 사용자 Python 스크립트 실행 중...");
+            const pyodideModule = await import("./utils/pyodideRunner");
+            const { runUserScriptPython } = pyodideModule;
+            const result = await runUserScriptPython(
+              inputData.rows || [],
+              code,
+              60000
+            );
+            newOutputData = {
+              type: "DataPreview",
+              columns: result.columns,
+              totalRowCount: result.rows.length,
+              rows: result.rows,
+            };
+            addLog("SUCCESS", "사용자 Python 스크립트 완료");
+          } catch (error: any) {
+            const errorMessage = error.message || String(error);
+            addLog("ERROR", `Python Script 실패: ${errorMessage}`);
+            throw new Error(`Python Script 실패: ${errorMessage}`);
+          }
         } else if (module.type === ModuleType.FeatureEngineer) {
           const inputData = getSingleInputData(module.id) as DataPreview;
           if (!inputData) throw new Error("Input data not available.");

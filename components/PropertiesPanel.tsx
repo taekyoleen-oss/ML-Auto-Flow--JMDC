@@ -2651,6 +2651,34 @@ const renderParameters = (
         </>
       );
     }
+    case ModuleType.PythonScript: {
+      const code = (module.parameters.code as string) ?? "";
+      return (
+        <div className="space-y-2">
+          <p className="text-[11px] text-gray-500">
+            Python Script는 <b>고급기능</b>입니다. 잠금 상태에서는 편집기가 숨겨집니다(상단 “고급기능 실행”으로 해제).
+          </p>
+          <AdvancedOnly>
+            <div className="space-y-2">
+              <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
+                ⚠️ 임의 Python 코드를 실행합니다 — <b>신뢰할 수 있는 코드만</b> 입력하세요.
+                입력 변수 <code>dataframe</code>, 출력 변수 <code>scripted_data</code>(DataFrame)를 만들어야 합니다.
+                무작위 연산은 시드를 고정하세요(<code>random_state=42</code> 등) — 재현성.
+              </div>
+              <textarea
+                className="w-full h-48 text-xs font-mono border border-gray-300 rounded p-2"
+                defaultValue={code}
+                spellCheck={false}
+                onBlur={(e) => onParamChange("code", e.target.value)}
+              />
+              <p className="text-[11px] text-gray-500">
+                이 코드는 “전체 코드 보기”로 내보낸 Python에 <b>그대로 포함</b>됩니다. 브라우저(Pyodide) 샌드박스에서 실행됩니다.
+              </p>
+            </div>
+          </AdvancedOnly>
+        </div>
+      );
+    }
     case ModuleType.FeatureEngineer: {
       const operations = module.parameters.operations || [];
       const opsHelp =

@@ -143,6 +143,13 @@ export const TOOLBOX_MODULES = [
     description:
       "Derives new features: cyclical (sin/cos), interaction (a*b), trend index.",
   },
+  {
+    type: ModuleType.PythonScript,
+    name: "Python Script (Advanced)",
+    icon: ScaleIcon,
+    description:
+      "Run custom Python (df -> scripted_data). Advanced/gated; included verbatim in exported code.",
+  },
   // Data Analysis
   {
     type: ModuleType.SplitData,
@@ -643,6 +650,16 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
       status: ModuleStatus.Pending,
       // operations: Array<{type:'cyclical', column, period} | {type:'interaction', columns:[a,b]} | {type:'trend', name}>
       parameters: { operations: [] },
+      inputs: [{ name: "data_in", type: "data" }],
+      outputs: [{ name: "data_out", type: "data" }],
+    },
+    {
+      type: ModuleType.PythonScript,
+      status: ModuleStatus.Pending,
+      // code: 사용자 정의 Python. 'dataframe'를 읽어 'scripted_data'(DataFrame)를 만들어야 한다.
+      parameters: {
+        code: "scripted_data = dataframe.copy()\n# 예: scripted_data['new_col'] = dataframe.iloc[:, 0] * 2",
+      },
       inputs: [{ name: "data_in", type: "data" }],
       outputs: [{ name: "data_out", type: "data" }],
     },

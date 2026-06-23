@@ -6032,6 +6032,70 @@ result
 }
 
 /**
+ * PythonScript(사용자 정의 코드)를 Pyodide 샌드박스에서 실행합니다(고급기능).
+ * 'dataframe' 입력 → 사용자 코드 → 'scripted_data'(DataFrame) 출력. 없으면 입력 통과.
+ * 임의 코드지만 브라우저 Pyodide 샌드박스라 호스트 파일시스템/네트워크에 접근 불가. 타임아웃 60초.
+ */
+export async function runUserScriptPython(
+  data: any[],
+  code: string,
+  timeoutMs: number = 60000
+): Promise<{ rows: any[]; columns: Array<{ name: string; type: string }> }> {
+  try {
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    py.globals.set("js_data", data);
+    py.globals.set("js_code", code || "scripted_data = dataframe");
+
+    const wrapped = `
+import pandas as pd
+import numpy as np
+
+dataframe = pd.DataFrame(js_data.to_py())
+_user_code = str(js_code)
+exec(_user_code, globals())
+if 'scripted_data' not in dir():
+    scripted_data = dataframe
+if not isinstance(scripted_data, pd.DataFrame):
+    scripted_data = pd.DataFrame(scripted_data)
+
+result_rows = scripted_data.to_dict('records')
+result_columns = [{'name': c, 'type': str(scripted_data[c].dtype)} for c in scripted_data.columns]
+result = {'rows': result_rows, 'columns': result_columns}
+result
+`;
+
+    const resultPyObj = await withTimeout(
+      Promise.resolve(py.runPython(wrapped)),
+      timeoutMs,
+      "Python Script 실행 타임아웃 (60초 초과)"
+    );
+
+    const result = fromPython(resultPyObj);
+
+    py.globals.delete("js_data");
+    py.globals.delete("js_code");
+
+    return result;
+  } catch (error: any) {
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_code");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python Script error: ${errorMessage}`);
+  }
+}
+
+/**
  * DataFiltering을 Python으로 실행합니다
  * 타임아웃: 60초
  */

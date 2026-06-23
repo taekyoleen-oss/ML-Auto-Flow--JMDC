@@ -229,6 +229,7 @@ const MODULE_OUTPUT_VAR: Record<string, string> = {
   EncodeCategorical: 'encoded_data',
   ScalingTransform: 'normalized_data',
   FeatureEngineer: 'engineered_data',
+  PythonScript: 'scripted_data',
   TransformData: 'transformed_data',
   TransitionData: 'transformed_data',
   ResampleData: 'resampled_data',

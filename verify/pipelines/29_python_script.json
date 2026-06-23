@@ -1,0 +1,10 @@
+{
+  "name": "PythonScript custom code (iris) — deterministic export",
+  "modules": [
+    { "type": "LoadData", "name": "Load", "parameters": { "source": "iris.csv" } },
+    { "type": "PythonScript", "name": "Script", "parameters": { "code": "scripted_data = dataframe.assign(sepal_area=(dataframe['sepal_length'] * dataframe['sepal_width']).round(4))" } }
+  ],
+  "connections": [
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 1, "toPort": "data_in" }
+  ]
+}

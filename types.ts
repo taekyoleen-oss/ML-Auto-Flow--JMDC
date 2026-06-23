@@ -14,6 +14,7 @@ export enum ModuleType {
   EncodeCategorical = "EncodeCategorical",
   ScalingTransform = "ScalingTransform",
   FeatureEngineer = "FeatureEngineer",
+  PythonScript = "PythonScript",
   TransitionData = "TransitionData",
   ResampleData = "ResampleData",
   SplitData = "SplitData",
