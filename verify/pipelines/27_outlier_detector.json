@@ -1,0 +1,10 @@
+{
+  "name": "Outlier detection IQR (iris) — real Python export",
+  "modules": [
+    { "type": "LoadData", "name": "Load", "parameters": { "source": "iris.csv" } },
+    { "type": "OutlierDetector", "name": "Outliers", "parameters": { "columns": [] } }
+  ],
+  "connections": [
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 1, "toPort": "data_in" }
+  ]
+}

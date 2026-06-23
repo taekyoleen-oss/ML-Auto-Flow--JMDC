@@ -1,0 +1,15 @@
+{
+  "name": "Hypothesis testing (iris) — real Python export",
+  "requires": ["scipy"],
+  "modules": [
+    { "type": "LoadData", "name": "Load", "parameters": { "source": "iris.csv" } },
+    { "type": "HypothesisTesting", "name": "Tests", "parameters": { "tests": [
+      { "testType": "shapiro_wilk", "columns": ["sepal_length"] },
+      { "testType": "anova", "columns": ["petal_length", "species"] },
+      { "testType": "t_test_one_sample", "columns": ["sepal_width"], "options": { "popmean": 3.0 } }
+    ] } }
+  ],
+  "connections": [
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 1, "toPort": "data_in" }
+  ]
+}

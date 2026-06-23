@@ -2087,19 +2087,25 @@ print(f"sklearn.neighbors.KNeighbors{'Classifier' if p_model_purpose == 'classif
 `,
 
   OutlierDetector: `
-# Outlier Detector 모듈
-# 이 모듈은 여러 방법을 사용하여 이상치를 탐지합니다:
-# - IQR (Interquartile Range) 기반 탐지
-# - Z-score 기반 탐지
-# - Isolation Forest (고급)
-# - Boxplot 기반 탐지
+import pandas as pd
+import numpy as np
 
-# Parameters from UI
-p_column = {column}
+# 이상치 탐지(IQR 1.5배 규칙, 결정적). 선택 열(없으면 전체 수치형)별 이상치 수·경계를 출력한다.
+p_columns = {columns}
+_cols = [c for c in (p_columns or []) if c in dataframe.columns]
+if not _cols:
+    _cols = dataframe.select_dtypes(include='number').columns.tolist()
 
-# Note: 실제 이상치 탐지는 Pyodide를 통해 JavaScript에서 실행됩니다.
-# 이 모듈은 설정만 저장하며, 실행은 App.tsx에서 처리됩니다.
-print(f"Outlier Detector configured for column: {p_column}")
+print("Outlier detection (IQR, 1.5*IQR rule):")
+for _c in _cols:
+    _s = pd.to_numeric(dataframe[_c], errors='coerce')
+    _q1 = _s.quantile(0.25); _q3 = _s.quantile(0.75)
+    _iqr = _q3 - _q1
+    _lo = _q1 - 1.5 * _iqr; _hi = _q3 + 1.5 * _iqr
+    _n = int(((_s < _lo) | (_s > _hi)).sum())
+    print(f"  {_c}: {_n} outliers / {int(_s.notna().sum())} values, bounds [{_lo:.6f}, {_hi:.6f}]")
+
+# 분석 모듈: 'dataframe'는 변경 없이 다음 단계로 통과한다.
 `,
 
   NormalityChecker: `
@@ -2321,37 +2327,90 @@ else:
 `,
 
   HypothesisTesting: `
-# Hypothesis Testing 모듈
-# 이 모듈은 다양한 가설 검정을 수행합니다:
-# - t-test (단일/독립/대응)
-# - 카이제곱 검정 (범주형)
-# - ANOVA (집단 간 평균 비교)
-# - KS-test (분포 비교)
-# - Shapiro-Wilk (정규성 검정)
-# - Levene test (등분산성 검정)
+import pandas as pd
+import numpy as np
+from scipy.stats import chi2_contingency, f_oneway, levene, shapiro, kstest, ttest_1samp, ttest_ind, ttest_rel
 
-# Parameters from UI
-p_tests = {tests}
+# 가설검정(결정적). tests = [{testType, columns, options?}, ...] — 인앱 performHypothesisTests와 동일 로직.
+tests_config = {tests}
+print(f"Hypothesis testing ({len(tests_config)} test(s)):")
+for test_config in tests_config:
+    test_type = str(test_config['testType'])
+    columns = test_config['columns']
+    options = test_config.get('options', {})
+    try:
+        if test_type == 't_test_one_sample':
+            sample = dataframe[columns[0]].dropna()
+            statistic, p_value = ttest_1samp(sample, options.get('popmean', 0), alternative=options.get('alternative', 'two-sided'))
+            name = 'One-Sample t-test'
+        elif test_type == 't_test_independent':
+            gc = options.get('group_column')
+            if gc:
+                gs = dataframe[gc].unique()
+                g1 = dataframe[dataframe[gc] == gs[0]][columns[0]].dropna(); g2 = dataframe[dataframe[gc] == gs[1]][columns[0]].dropna()
+            else:
+                g1 = dataframe[columns[0]].dropna(); g2 = dataframe[columns[1]].dropna()
+            statistic, p_value = ttest_ind(g1, g2, equal_var=options.get('equal_var', True), alternative=options.get('alternative', 'two-sided'))
+            name = 'Independent t-test'
+        elif test_type == 't_test_paired':
+            paired = dataframe[[columns[0], columns[1]]].dropna()
+            statistic, p_value = ttest_rel(paired[columns[0]], paired[columns[1]], alternative=options.get('alternative', 'two-sided'))
+            name = 'Paired t-test'
+        elif test_type == 'chi_square':
+            ct = pd.crosstab(dataframe[columns[0]], dataframe[columns[1]])
+            statistic, p_value, _dof, _exp = chi2_contingency(ct); name = 'Chi-square'
+        elif test_type == 'anova':
+            gc = columns[1] if len(columns) > 1 else None
+            if gc:
+                gs = dataframe[gc].unique(); gd = [dataframe[dataframe[gc] == g][columns[0]].dropna() for g in gs]
+            else:
+                gd = [dataframe[c].dropna() for c in columns]
+            statistic, p_value = f_oneway(*gd); name = 'One-way ANOVA'
+        elif test_type == 'ks_test':
+            s = dataframe[columns[0]].dropna(); dist = options.get('distribution', 'norm')
+            if dist == 'norm':
+                statistic, p_value = kstest(s, 'norm', args=(s.mean(), s.std()))
+            elif dist == 'uniform':
+                statistic, p_value = kstest(s, 'uniform')
+            else:
+                statistic, p_value = kstest(s, dataframe[columns[1]].dropna())
+            name = 'Kolmogorov-Smirnov'
+        elif test_type == 'shapiro_wilk':
+            s = dataframe[columns[0]].dropna()
+            if len(s) > 5000:
+                s = s.sample(5000, random_state=42)
+            statistic, p_value = shapiro(s); name = 'Shapiro-Wilk'
+        elif test_type == 'levene':
+            gc = columns[1] if len(columns) > 1 else None
+            if gc:
+                gs = dataframe[gc].unique(); gd = [dataframe[dataframe[gc] == g][columns[0]].dropna() for g in gs]
+            else:
+                gd = [dataframe[c].dropna() for c in columns]
+            statistic, p_value = levene(*gd, center=options.get('center', 'median')); name = 'Levene'
+        else:
+            print(f"  [{test_type}] unsupported test type"); continue
+        concl = 'Reject H0' if float(p_value) < 0.05 else 'Fail to reject H0'
+        print(f"  {name} {list(columns)}: statistic={float(statistic):.6f}, p-value={float(p_value):.6f} -> {concl}")
+    except Exception as _e:
+        print(f"  [{test_type}] error: {_e}")
 
-# Note: 실제 가설 검정은 Pyodide를 통해 JavaScript에서 실행됩니다.
-# 이 모듈은 설정만 저장하며, 실행은 App.tsx에서 처리됩니다.
-print(f"Hypothesis Testing configured for tests: {p_tests}")
+# 분석 모듈: 'dataframe'는 변경 없이 다음 단계로 통과한다.
 `,
 
   Correlation: `
-# Correlation 모듈
-# 이 모듈은 변수 간 상관관계를 분석합니다:
-# - Pearson/Spearman/Kendall 상관계수
-# - 범주형 연관성 (Cramér's V)
-# - Heatmap 자동 생성
-# - Pairplot 및 다양한 plot
+import pandas as pd
 
-# Parameters from UI
+# 변수 간 상관분석(결정적). 선택 열(없으면 전체 수치형)의 Pearson 상관행렬을 계산·출력한다.
 p_columns = {columns}
+_cols = [c for c in (p_columns or []) if c in dataframe.columns]
+if not _cols:
+    _cols = dataframe.select_dtypes(include='number').columns.tolist()
 
-# Note: 실제 상관분석은 Pyodide를 통해 JavaScript에서 실행됩니다.
-# 이 모듈은 설정만 저장하며, 실행은 App.tsx에서 처리됩니다.
-print(f"Correlation configured for columns: {p_columns}")
+correlation_matrix = dataframe[_cols].corr(method='pearson')
+print("Correlation matrix (Pearson):")
+print(correlation_matrix.round(6).to_string())
+
+# 분석 모듈: 'dataframe'는 변경 없이 다음 단계로 통과한다.
 `,
 
   // ===== JMDC Analysis Modules (PRD v2.0 §17, J1~J7) =====
