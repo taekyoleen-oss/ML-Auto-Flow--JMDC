@@ -1,0 +1,19 @@
+{
+  "name": "elston bike sharing hourly demand (RandomForest)",
+  "modules": [
+    { "type": "LoadData", "name": "Load", "parameters": { "source": "bike_sharing_hourly.csv" }, "position": { "x": 50, "y": 50 } },
+    { "type": "SplitData", "name": "Split", "parameters": { "train_size": 0.7, "random_state": 42, "shuffle": "True", "stratify": "False", "stratify_column": null }, "position": { "x": 380, "y": 50 } },
+    { "type": "RandomForest", "name": "RF", "parameters": { "model_purpose": "regression", "n_estimators": 40, "criterion": "mse", "max_depth": 16, "max_features": null }, "position": { "x": 50, "y": 320 } },
+    { "type": "TrainModel", "name": "Train", "parameters": { "feature_columns": ["season","yr","mnth","hr","holiday","weekday","workingday","weathersit","temp","hum","windspeed"], "label_column": "cnt" }, "position": { "x": 380, "y": 320 } },
+    { "type": "ScoreModel", "name": "Score", "parameters": {}, "position": { "x": 710, "y": 320 } },
+    { "type": "EvaluateModel", "name": "Eval", "parameters": { "model_type": "regression", "label_column": "cnt", "prediction_column": "Predict", "threshold": 0.5 }, "position": { "x": 710, "y": 50 } }
+  ],
+  "connections": [
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 1, "toPort": "data_in" },
+    { "fromModuleIndex": 1, "fromPort": "train_data_out", "toModuleIndex": 3, "toPort": "data_in" },
+    { "fromModuleIndex": 2, "fromPort": "model_out", "toModuleIndex": 3, "toPort": "model_in" },
+    { "fromModuleIndex": 3, "fromPort": "trained_model_out", "toModuleIndex": 4, "toPort": "model_in" },
+    { "fromModuleIndex": 1, "fromPort": "test_data_out", "toModuleIndex": 4, "toPort": "data_in" },
+    { "fromModuleIndex": 4, "fromPort": "scored_data_out", "toModuleIndex": 5, "toPort": "data_in" }
+  ]
+}

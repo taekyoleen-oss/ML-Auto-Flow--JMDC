@@ -13,6 +13,7 @@ export enum ModuleType {
   TransformData = "TransformData",
   EncodeCategorical = "EncodeCategorical",
   ScalingTransform = "ScalingTransform",
+  FeatureEngineer = "FeatureEngineer",
   TransitionData = "TransitionData",
   ResampleData = "ResampleData",
   SplitData = "SplitData",
@@ -38,6 +39,7 @@ export enum ModuleType {
   SweepParameters = "SweepParameters",
   ScoreModel = "ScoreModel",
   EvaluateModel = "EvaluateModel",
+  FeatureImportance = "FeatureImportance",
 
   // Unsupervised Learning
   KMeans = "KMeans",

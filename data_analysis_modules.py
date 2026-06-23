@@ -233,6 +233,12 @@ def filter_data(df: pd.DataFrame, filter_type: str, conditions: list, logical_op
                     mask = df[column] >= value
                 elif operator == "<=":
                     mask = df[column] <= value
+                elif operator == "quantile_above":
+                    # value(0~1 분위수) '이상'만 유지 → 하위 꼬리 제거(이상치 트리밍, 결정적)
+                    mask = df[column] >= df[column].quantile(float(value))
+                elif operator == "quantile_below":
+                    # value(0~1 분위수) '이하'만 유지 → 상위 꼬리 제거(이상치 트리밍, 결정적)
+                    mask = df[column] <= df[column].quantile(float(value))
                 elif operator == "contains":
                     mask = df[column].astype(str).str.contains(str(value), na=False, case=False)
                 elif operator == "not_contains":
@@ -588,6 +594,53 @@ def transform_data(df: pd.DataFrame, transformations: dict):
     
     print("데이터 변환 완료.")
     return df_transformed
+
+
+def feature_engineer(df: pd.DataFrame, operations):
+    """
+    기존 열에서 결정적 파생 특징을 생성합니다(시계열·주기·상호작용).
+    codeSnippets.ts FeatureEngineer 템플릿과 정합.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+    operations : list
+        각 항목:
+        - {'type': 'cyclical', 'column': str, 'period': float} -> {col}_sin, {col}_cos
+        - {'type': 'interaction', 'columns': [a, b]}           -> a_x_b = a*b
+        - {'type': 'trend', 'name': str}                       -> 0..n-1 추세 카운터
+
+    Returns
+    -------
+    pd.DataFrame
+    """
+    import numpy as np
+    df_fe = df.copy()
+    if isinstance(operations, str):
+        import json as _json
+        operations = _json.loads(operations)
+    for op in (operations or []):
+        t = op.get('type')
+        if t == 'cyclical':
+            col = op.get('column')
+            period = float(op.get('period', 24) or 24)
+            if col in df_fe.columns and period:
+                ang = 2.0 * np.pi * df_fe[col].astype(float) / period
+                df_fe[f'{col}_sin'] = np.sin(ang)
+                df_fe[f'{col}_cos'] = np.cos(ang)
+                print(f"  cyclical: {col} (period={period}) -> {col}_sin, {col}_cos")
+        elif t == 'interaction':
+            cols = op.get('columns', []) or []
+            if len(cols) == 2 and all(c in df_fe.columns for c in cols):
+                new_col = f"{cols[0]}_x_{cols[1]}"
+                df_fe[new_col] = df_fe[cols[0]].astype(float) * df_fe[cols[1]].astype(float)
+                print(f"  interaction: {cols[0]} * {cols[1]} -> {new_col}")
+        elif t == 'trend':
+            name = op.get('name', 'trend_index') or 'trend_index'
+            df_fe[name] = np.arange(len(df_fe))
+            print(f"  trend: {name} (0..{len(df_fe) - 1})")
+    print(f"특징 공학 완료. 열 수: {df.shape[1]} -> {df_fe.shape[1]}")
+    return df_fe
 
 
 # ============================================================================
@@ -1361,6 +1414,16 @@ def sweep_parameters(model, df: pd.DataFrame, feature_columns: list, label_colum
     print(f"  Best params: {search.best_params_}")
     print(f"  Best CV score: {search.best_score_:.6f}")
 
+    # 폴드별 교차검증 리포트(평균/표준편차) — 표준편차가 평균 대비 작으면 일반화가 안정적이라는 신호.
+    # 결정적(정수 cv) 경로에서 byte-identical 재현. codeSnippets.ts SweepParameters 템플릿과 정합.
+    _best_idx = int(search.best_index_)
+    _cvr = search.cv_results_
+    print(f"  Best CV mean +/- std: {_cvr['mean_test_score'][_best_idx]:.6f} +/- {_cvr['std_test_score'][_best_idx]:.6f}")
+    for _f in range(cv_folds):
+        _k = f'split{_f}_test_score'
+        if _k in _cvr:
+            print(f"    fold {_f}: {_cvr[_k][_best_idx]:.6f}")
+
     return trained_model
 
 
@@ -1512,7 +1575,68 @@ def evaluate_model(model, df: pd.DataFrame, label_column: str, prediction_column
         print(f"상대 제곱 오차 (RSE): {rse:.4f}")
         print(f"상대 절대 오차 (RAE): {rae:.4f}")
 
+        # 잔차 진단 요약(Elston식 "잔차 심문"): 잔차 = 예측 - 실제. 결정적 요약 통계.
+        # codeSnippets.ts EvaluateModel 템플릿과 정합(시각 차트는 앱 미리보기 담당).
+        residuals = y_pred_arr - y_true_arr
+        res_mean = float(np.mean(residuals))
+        res_std = float(np.std(residuals))
+        res_q = np.quantile(residuals, [0.0, 0.25, 0.5, 0.75, 1.0])
+        res_outliers = int(np.sum(np.abs(residuals - res_mean) > 3.0 * res_std)) if res_std > 0 else 0
+        metrics['residual_mean'] = res_mean
+        metrics['residual_std'] = res_std
+        metrics['residual_min'] = float(res_q[0])
+        metrics['residual_q25'] = float(res_q[1])
+        metrics['residual_median'] = float(res_q[2])
+        metrics['residual_q75'] = float(res_q[3])
+        metrics['residual_max'] = float(res_q[4])
+        metrics['residual_outliers_3sd'] = res_outliers
+        print("잔차 요약 (예측 - 실제):")
+        print(f"  평균: {res_mean:.6f}  표준편차: {res_std:.6f}")
+        print(f"  최소/q25/중앙/q75/최대: {res_q[0]:.6f} / {res_q[1]:.6f} / {res_q[2]:.6f} / {res_q[3]:.6f} / {res_q[4]:.6f}")
+        print(f"  |잔차|>3σ 이상치: {res_outliers}")
+
     return metrics
+
+
+def feature_importance(model, df: pd.DataFrame, label_column: str, n_repeats: int = 10):
+    """
+    순열 특징중요도(permutation importance)를 계산합니다(결정적, random_state=42).
+    codeSnippets.ts FeatureImportance 템플릿과 정합.
+
+    Parameters
+    ----------
+    model : 학습된(fitted) 추정기
+    df : pd.DataFrame  (특징 + 레이블 포함; 보통 test 분할)
+    label_column : str
+    n_repeats : int
+
+    Returns
+    -------
+    pd.DataFrame  (feature, importance_mean, importance_std — 중요도 내림차순)
+    """
+    from sklearn.inspection import permutation_importance
+    if hasattr(model, 'feature_names_in_'):
+        fi_features = list(model.feature_names_in_)
+    else:
+        fi_features = [c for c in df.columns if c != label_column]
+
+    X_imp = df[fi_features]
+    y_imp = df[label_column]
+
+    pi = permutation_importance(
+        model, X_imp, y_imp, n_repeats=int(n_repeats), random_state=42, n_jobs=1
+    )
+
+    result = pd.DataFrame({
+        'feature': fi_features,
+        'importance_mean': pi.importances_mean,
+        'importance_std': pi.importances_std,
+    }).sort_values('importance_mean', ascending=False).reset_index(drop=True)
+
+    print("순열 특징중요도 (높은 순):")
+    for _, row in result.iterrows():
+        print(f"  {row['feature']}: {row['importance_mean']:.6f} +/- {row['importance_std']:.6f}")
+    return result
 
 
 # ============================================================================

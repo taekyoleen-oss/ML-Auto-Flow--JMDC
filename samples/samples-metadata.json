@@ -59,6 +59,14 @@
     "expectedOutput": "4개 군집 (277 / 95 / 58 / 10)",
     "modelOrTask": "K-Means (군집, n_clusters=4)"
   },
+  "Book_BikeSharing_DemandForecast.json": {
+    "inputData": "Examples_in_Load/bike_sharing_hourly.csv (UCI Bike Sharing, 시간별 17,379행)",
+    "description": "[Elston 책 / 제9부 28장] 자전거 대여 시간별 수요예측 — 랜덤 포레스트 회귀. 수치형 11개 특성(hr·temp 등), train 0.7, seed 42. 잔차진단·교차검증의 종합 사례.",
+    "tags": ["회귀", "랜덤포레스트", "수요예측", "Elston 책", "시계열"],
+    "dataFile": "Examples_in_Load/bike_sharing_hourly.csv",
+    "expectedOutput": "R²≈0.9422, RMSE≈42.72, MAE≈25.82 (test n=5214)",
+    "modelOrTask": "랜덤 포레스트 (회귀, n_estimators=40, max_depth=16)"
+  },
   "JMDC_Cohort_IncidenceSurvival.json": {
     "inputData": "data/jmdc_synthetic/cohort_ready.csv (JMDC 합성 코호트; 모듈 기본은 synthetic 생성기 seed 43)",
     "description": "[JMDC 전용] J1 코호트 빌더→J2 아웃컴 라벨러→(J3 발생률 + J4 생존 비교) 헬스케어 코호트 데모. Index Date(만 50세) 기준, 2년 washout, 5년 아웃컴 윈도우. has_diabetes 군별 생존 비교(log-rank). Pyodide 런타임 실행 모듈로 standalone 전체코드는 설정 출력 위주(verify 픽스처 범위 외).",

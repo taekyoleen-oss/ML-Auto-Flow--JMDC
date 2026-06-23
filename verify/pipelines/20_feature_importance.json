@@ -1,0 +1,17 @@
+{
+  "name": "elston permutation feature importance (RandomForest regression)",
+  "modules": [
+    { "type": "LoadData", "name": "Load", "parameters": { "source": "bike_sharing_hourly.csv" } },
+    { "type": "SplitData", "name": "Split", "parameters": { "train_size": 0.7, "random_state": 42, "shuffle": "True", "stratify": "False", "stratify_column": null } },
+    { "type": "RandomForest", "name": "RF", "parameters": { "model_purpose": "regression", "n_estimators": 40, "criterion": "mse", "max_depth": 16, "max_features": null } },
+    { "type": "TrainModel", "name": "Train", "parameters": { "feature_columns": ["season","yr","mnth","hr","holiday","weekday","workingday","weathersit","temp","hum","windspeed"], "label_column": "cnt" } },
+    { "type": "FeatureImportance", "name": "Importance", "parameters": { "label_column": "cnt", "n_repeats": 5 } }
+  ],
+  "connections": [
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 1, "toPort": "data_in" },
+    { "fromModuleIndex": 1, "fromPort": "train_data_out", "toModuleIndex": 3, "toPort": "data_in" },
+    { "fromModuleIndex": 2, "fromPort": "model_out", "toModuleIndex": 3, "toPort": "model_in" },
+    { "fromModuleIndex": 3, "fromPort": "trained_model_out", "toModuleIndex": 4, "toPort": "model_in" },
+    { "fromModuleIndex": 1, "fromPort": "test_data_out", "toModuleIndex": 4, "toPort": "data_in" }
+  ]
+}

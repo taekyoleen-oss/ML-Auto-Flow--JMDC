@@ -5949,6 +5949,89 @@ result
 }
 
 /**
+ * FeatureEngineer를 Python으로 실행합니다 (시계열·주기·상호작용 파생 특징, 결정적).
+ * codeSnippets.ts FeatureEngineer 템플릿 / data_analysis_modules.feature_engineer 와 정합.
+ * 타임아웃: 60초
+ */
+export async function featureEngineerPython(
+  data: any[],
+  operations: any[],
+  timeoutMs: number = 60000
+): Promise<{ rows: any[]; columns: Array<{ name: string; type: string }> }> {
+  try {
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    py.globals.set("js_data", data);
+    py.globals.set("js_operations", operations || []);
+
+    const code = `
+import pandas as pd
+import numpy as np
+
+df = pd.DataFrame(js_data.to_py())
+operations = js_operations.to_py()
+
+df_fe = df.copy()
+for op in (operations or []):
+    t = op.get('type')
+    if t == 'cyclical':
+        col = op.get('column')
+        period = float(op.get('period', 24) or 24)
+        if col in df_fe.columns and period:
+            ang = 2.0 * np.pi * df_fe[col].astype(float) / period
+            df_fe[f'{col}_sin'] = np.sin(ang)
+            df_fe[f'{col}_cos'] = np.cos(ang)
+    elif t == 'interaction':
+        cols = op.get('columns', []) or []
+        if len(cols) == 2 and all(c in df_fe.columns for c in cols):
+            new_col = f"{cols[0]}_x_{cols[1]}"
+            df_fe[new_col] = df_fe[cols[0]].astype(float) * df_fe[cols[1]].astype(float)
+    elif t == 'trend':
+        name = op.get('name', 'trend_index') or 'trend_index'
+        df_fe[name] = np.arange(len(df_fe))
+
+result_rows = df_fe.to_dict('records')
+result_columns = [{'name': col, 'type': str(df_fe[col].dtype)} for col in df_fe.columns]
+
+result = {
+    'rows': result_rows,
+    'columns': result_columns
+}
+
+result
+`;
+
+    const resultPyObj = await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python FeatureEngineer 실행 타임아웃 (60초 초과)"
+    );
+
+    const result = fromPython(resultPyObj);
+
+    py.globals.delete("js_data");
+    py.globals.delete("js_operations");
+
+    return result;
+  } catch (error: any) {
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_operations");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python FeatureEngineer error: ${errorMessage}`);
+  }
+}
+
+/**
  * DataFiltering을 Python으로 실행합니다
  * 타임아웃: 60초
  */

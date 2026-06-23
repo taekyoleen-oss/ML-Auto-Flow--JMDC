@@ -136,6 +136,13 @@ export const TOOLBOX_MODULES = [
     icon: ScaleIcon,
     description: "Scales numeric features to a standard range.",
   },
+  {
+    type: ModuleType.FeatureEngineer,
+    name: "Feature Engineer",
+    icon: ScaleIcon,
+    description:
+      "Derives new features: cyclical (sin/cos), interaction (a*b), trend index.",
+  },
   // Data Analysis
   {
     type: ModuleType.SplitData,
@@ -167,6 +174,13 @@ export const TOOLBOX_MODULES = [
     name: "Evaluate Model",
     icon: CheckBadgeIcon,
     description: "Evaluates the performance of a model's predictions.",
+  },
+  {
+    type: ModuleType.FeatureImportance,
+    name: "Feature Importance",
+    icon: CheckBadgeIcon,
+    description:
+      "Permutation feature importance for a trained model (deterministic).",
   },
 
   // Supervised Learning
@@ -625,6 +639,14 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
       ],
     },
     {
+      type: ModuleType.FeatureEngineer,
+      status: ModuleStatus.Pending,
+      // operations: Array<{type:'cyclical', column, period} | {type:'interaction', columns:[a,b]} | {type:'trend', name}>
+      parameters: { operations: [] },
+      inputs: [{ name: "data_in", type: "data" }],
+      outputs: [{ name: "data_out", type: "data" }],
+    },
+    {
       type: ModuleType.TransitionData,
       status: ModuleStatus.Pending,
       parameters: { transformations: {} },
@@ -965,6 +987,16 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
       },
       inputs: [{ name: "data_in", type: "data" }],
       outputs: [{ name: "evaluation_out", type: "evaluation" }],
+    },
+    {
+      type: ModuleType.FeatureImportance,
+      status: ModuleStatus.Pending,
+      parameters: { label_column: null, n_repeats: 10 },
+      inputs: [
+        { name: "model_in", type: "model" },
+        { name: "data_in", type: "data" },
+      ],
+      outputs: [{ name: "data_out", type: "data" }],
     },
     {
       type: ModuleType.OLSModel,

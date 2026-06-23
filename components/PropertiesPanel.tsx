@@ -1134,6 +1134,8 @@ const renderParameters = (
         { label: "Less Than (<)", value: "<" },
         { label: "Greater or Equal (>=)", value: ">=" },
         { label: "Less or Equal (<=)", value: "<=" },
+        { label: "Quantile ≥ (백분위 이상 유지·하위꼬리 제거)", value: "quantile_above" },
+        { label: "Quantile ≤ (백분위 이하 유지·상위꼬리 제거)", value: "quantile_below" },
         { label: "Contains", value: "contains" },
         { label: "Not Contains", value: "not_contains" },
         { label: "Is Null", value: "is_null" },
@@ -2649,6 +2651,38 @@ const renderParameters = (
         </>
       );
     }
+    case ModuleType.FeatureEngineer: {
+      const operations = module.parameters.operations || [];
+      const opsHelp =
+        '예시(JSON 배열):\n[\n  {"type": "cyclical", "column": "hr", "period": 24},\n  {"type": "interaction", "columns": ["workingday", "hr"]},\n  {"type": "trend", "name": "trend_index"}\n]\n- cyclical: {col}_sin, {col}_cos = sin/cos(2π·col/period)\n- interaction: a_x_b = a * b\n- trend: 0..n-1 순번(추세)';
+      return (
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <h5 className="text-xs text-gray-500 uppercase font-bold">
+              Feature Operations (JSON)
+            </h5>
+            <div title={opsHelp}>
+              <InformationCircleIcon className="w-5 h-5 text-gray-400 cursor-help" />
+            </div>
+          </div>
+          <textarea
+            className="w-full h-40 text-xs font-mono border border-gray-300 rounded p-2"
+            defaultValue={JSON.stringify(operations, null, 2)}
+            onBlur={(e) => {
+              try {
+                const parsed = JSON.parse(e.target.value);
+                if (Array.isArray(parsed)) onParamChange("operations", parsed);
+              } catch {
+                /* 유효하지 않은 JSON: 이전 값 유지 */
+              }
+            }}
+          />
+          <p className="text-[11px] text-gray-500 mt-1">
+            cyclical(주기 인코딩) · interaction(상호작용) · trend(추세 순번). 유효한 JSON 배열일 때만 저장됩니다.
+          </p>
+        </div>
+      );
+    }
     case ModuleType.TransitionData: {
       const sourceData = getConnectedDataSource(module.id);
       const numericColumns = (sourceData?.columns || []).filter(
@@ -4117,6 +4151,60 @@ const renderParameters = (
         </>
       );
     }
+    case ModuleType.FeatureImportance: {
+      const fiSource = getConnectedDataSource(module.id);
+      const fiColumns = fiSource?.columns?.map((c) => c.name) || [];
+      const fiParams = module.parameters || {};
+      return (
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs text-gray-500 uppercase font-bold mb-1">
+              Label Column (정답 열)
+            </label>
+            {fiColumns.length > 0 ? (
+              <select
+                className="w-full text-sm border border-gray-300 rounded p-1.5"
+                value={(fiParams.label_column as string) || ""}
+                onChange={(e) => onParamChange("label_column", e.target.value)}
+              >
+                <option value="">(선택)</option>
+                {fiColumns.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                className="w-full text-sm border border-gray-300 rounded p-1.5"
+                defaultValue={(fiParams.label_column as string) || ""}
+                placeholder="예: cnt"
+                onBlur={(e) => onParamChange("label_column", e.target.value)}
+              />
+            )}
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 uppercase font-bold mb-1">
+              n_repeats (셔플 반복수)
+            </label>
+            <input
+              type="number"
+              min={1}
+              className="w-full text-sm border border-gray-300 rounded p-1.5"
+              defaultValue={(fiParams.n_repeats as number) ?? 10}
+              onBlur={(e) =>
+                onParamChange("n_repeats", parseInt(e.target.value, 10) || 10)
+              }
+            />
+          </div>
+          <p className="text-[11px] text-gray-500">
+            학습된 모델(model_in)과 데이터(data_in, 보통 test 분할)를 연결하세요. 순열 특징중요도는
+            결정적(random_state=42)이며, 전체 코드 내보내기로 재현 가능한 표를 산출합니다.
+          </p>
+        </div>
+      );
+    }
     case ModuleType.EvaluateModel: {
       const sourceData = getConnectedDataSource(module.id);
       const inputColumns = sourceData?.columns?.map((c) => c.name) || [];
@@ -5448,6 +5536,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         return <MissingValueSummary data={inputData} />;
       case ModuleType.ScalingTransform:
         return <DataTableStats data={inputData} />;
+      case ModuleType.FeatureEngineer:
+        return <DataStatsSummary data={inputData} />;
       case ModuleType.TransitionData:
         return <DataStatsSummary data={inputData} />;
       case ModuleType.SplitData:

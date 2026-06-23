@@ -5387,6 +5387,40 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
             addLog("ERROR", `Python NormalizeData 실패: ${errorMessage}`);
             throw new Error(`정규화 실패: ${errorMessage}`);
           }
+        } else if (module.type === ModuleType.FeatureEngineer) {
+          const inputData = getSingleInputData(module.id) as DataPreview;
+          if (!inputData) throw new Error("Input data not available.");
+
+          const operations = (module.parameters.operations as any[]) || [];
+
+          try {
+            addLog(
+              "INFO",
+              "Pyodide를 사용하여 Python으로 특징 공학 수행 중..."
+            );
+
+            const pyodideModule = await import("./utils/pyodideRunner");
+            const { featureEngineerPython } = pyodideModule;
+
+            const result = await featureEngineerPython(
+              inputData.rows || [],
+              operations,
+              60000
+            );
+
+            newOutputData = {
+              type: "DataPreview",
+              columns: result.columns,
+              totalRowCount: result.rows.length,
+              rows: result.rows,
+            };
+
+            addLog("SUCCESS", "Python으로 특징 공학 완료");
+          } catch (error: any) {
+            const errorMessage = error.message || String(error);
+            addLog("ERROR", `Python FeatureEngineer 실패: ${errorMessage}`);
+            throw new Error(`특징 공학 실패: ${errorMessage}`);
+          }
         } else if (module.type === ModuleType.TransitionData) {
           const inputData = getSingleInputData(module.id) as DataPreview;
           if (!inputData) throw new Error("Input data not available.");
@@ -8370,6 +8404,26 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
               throw new Error(`모델 예측 실패: ${errorMessage}`);
             }
           }
+        } else if (module.type === ModuleType.FeatureImportance) {
+          // 순열 특징중요도는 학습된 모델 객체가 필요하지만, 인앱 실행기는 (지도학습의 경우)
+          // 선형 계수만 보관하므로 트리 등 일반 모델을 인앱에서 재예측할 수 없다.
+          // 따라서 인앱에서는 안내만 제공하고, 실제 계산은 '전체 코드 보기'로 내보낸
+          // 결정적 Python(permutation_importance, random_state=42)에서 수행한다(정직한 한계).
+          newOutputData = {
+            type: "DataPreview",
+            columns: [{ name: "info", type: "string" }],
+            totalRowCount: 1,
+            rows: [
+              {
+                info:
+                  "순열 특징중요도는 '전체 코드 보기'로 내보낸 Python에서 결정적으로 계산됩니다(random_state=42).",
+              },
+            ],
+          };
+          addLog(
+            "INFO",
+            "FeatureImportance: 인앱은 안내만 제공 — 전체코드 내보내기에서 순열 중요도를 계산합니다(정직한 한계)."
+          );
         } else if (module.type === ModuleType.EvaluateModel) {
           const inputData = getSingleInputData(
             module.id,

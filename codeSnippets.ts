@@ -198,6 +198,12 @@ def filter_data(df: pd.DataFrame, filter_type: str, conditions: list, logical_op
                     mask = df[column] >= value
                 elif operator == "<=":
                     mask = df[column] <= value
+                elif operator == "quantile_above":
+                    # value(0~1 분위수) '이상'만 유지 → 하위 꼬리 제거(이상치 트리밍, 결정적)
+                    mask = df[column] >= df[column].quantile(float(value))
+                elif operator == "quantile_below":
+                    # value(0~1 분위수) '이하'만 유지 → 상위 꼬리 제거(이상치 트리밍, 결정적)
+                    mask = df[column] <= df[column].quantile(float(value))
                 elif operator == "contains":
                     mask = df[column].astype(str).str.contains(str(value), na=False, case=False)
                 elif operator == "not_contains":
@@ -490,6 +496,47 @@ p_columns = [col for col, sel in column_selections.items() if sel.get('selected'
 
 # Execution
 # normalized_data = normalize_data(dataframe, p_method, p_columns)
+`,
+  FeatureEngineer: `
+import pandas as pd
+import numpy as np
+
+# Feature Engineer 모듈 — 기존 열에서 결정적 파생 특징을 만든다.
+# operations: 리스트. 각 항목은 다음 중 하나(결정적):
+#   {'type': 'cyclical',    'column': 'hr',          'period': 24}      -> {col}_sin, {col}_cos = sin/cos(2*pi*col/period)
+#   {'type': 'interaction', 'columns': ['a', 'b']}                      -> a_x_b = a * b
+#   {'type': 'trend',       'name': 'trend_index'}                      -> 0..n-1 시작점부터의 순번(추세)
+p_operations = {operations}
+
+def feature_engineer(df: pd.DataFrame, operations):
+    df_fe = df.copy()
+    if isinstance(operations, str):
+        import json as _json
+        operations = _json.loads(operations)
+    for op in (operations or []):
+        t = op.get('type')
+        if t == 'cyclical':
+            col = op.get('column')
+            period = float(op.get('period', 24) or 24)
+            if col in df_fe.columns and period:
+                ang = 2.0 * np.pi * df_fe[col].astype(float) / period
+                df_fe[f'{col}_sin'] = np.sin(ang)
+                df_fe[f'{col}_cos'] = np.cos(ang)
+                print(f"  cyclical: {col} (period={period}) -> {col}_sin, {col}_cos")
+        elif t == 'interaction':
+            cols = op.get('columns', []) or []
+            if len(cols) == 2 and all(c in df_fe.columns for c in cols):
+                new_col = f"{cols[0]}_x_{cols[1]}"
+                df_fe[new_col] = df_fe[cols[0]].astype(float) * df_fe[cols[1]].astype(float)
+                print(f"  interaction: {cols[0]} * {cols[1]} -> {new_col}")
+        elif t == 'trend':
+            name = op.get('name', 'trend_index') or 'trend_index'
+            df_fe[name] = np.arange(len(df_fe))
+            print(f"  trend: {name} (0..{len(df_fe) - 1})")
+    print(f"특징 공학 완료. 열 수: {df.shape[1]} -> {df_fe.shape[1]}")
+    return df_fe
+
+engineered_data = feature_engineer(dataframe, p_operations)
 `,
   TransitionData: `
 import pandas as pd
@@ -816,6 +863,48 @@ if p_model_purpose == 'classification':
 # model variable contains the model instance ready for training.
 `,
 
+  RandomForest: `
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+
+# This module creates a random forest (bagged decision trees) model instance.
+# The model will be trained in the 'Train Model' module.
+# Parameters from UI
+p_model_purpose = {model_purpose}
+p_n_estimators = {n_estimators}
+p_criterion = {criterion}
+p_max_depth = {max_depth} if {max_depth} else None
+p_max_features = {max_features} if {max_features} else None
+
+# Create model instance based on model purpose
+if p_model_purpose == 'classification':
+    criterion_clf = p_criterion.lower() if p_criterion else 'gini'
+    model = RandomForestClassifier(
+        n_estimators=p_n_estimators,
+        criterion=criterion_clf,
+        max_depth=p_max_depth,
+        max_features=p_max_features,
+        random_state=42
+    )
+else:
+    criterion_reg = 'squared_error' if p_criterion == 'mse' else 'absolute_error'
+    model = RandomForestRegressor(
+        n_estimators=p_n_estimators,
+        criterion=criterion_reg,
+        max_depth=p_max_depth,
+        max_features=p_max_features,
+        random_state=42
+    )
+
+print(f"Random Forest model instance created successfully ({p_model_purpose}).")
+print(f"  N Estimators: {p_n_estimators}")
+print(f"  Criterion: {p_criterion}")
+print(f"  Max Depth: {p_max_depth}")
+print(f"  Max Features: {p_max_features}")
+
+# Note: The model is not fitted here. It will be fitted in the 'Train Model' module.
+# model variable contains the model instance ready for training.
+`,
+
   GradientBoosting: `
 from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
 
@@ -1004,6 +1093,17 @@ print(f"  CV folds: {cv_folds}")
 print(f"  Scoring: {scoring if scoring is not None else 'estimator default'}")
 print(f"  Best params: {search.best_params_}")
 print(f"  Best CV score: {search.best_score_:.6f}")
+
+# Per-fold cross-validation report (mean / std across folds).
+# Consistent metrics with a small std relative to the mean indicate the model
+# should generalize well in production (Elston식 일반화 신뢰도 점검). Deterministic.
+_best_idx = int(search.best_index_)
+_cvr = search.cv_results_
+print(f"  Best CV mean +/- std: {_cvr['mean_test_score'][_best_idx]:.6f} +/- {_cvr['std_test_score'][_best_idx]:.6f}")
+for _f in range(cv_folds):
+    _k = f'split{_f}_test_score'
+    if _k in _cvr:
+        print(f"    fold {_f}: {_cvr[_k][_best_idx]:.6f}")
 
 # 'trained_model' is now ready for Score Model / Evaluate Model modules.
 `,
@@ -1355,7 +1455,63 @@ else:  # regression
     print(f"  Relative Squared Error (RSE): {rse:.6f}")
     print(f"  Relative Absolute Error (RAE): {rae:.6f}")
 
+    # Residual diagnostics summary (Elston식 "잔차 심문"): 잔차 = 예측 - 실제.
+    # 시각 차트는 앱 미리보기에서 제공하고, 여기서는 결정적 요약 통계를 출력/저장한다.
+    residuals = y_pred_arr - y_true_arr
+    res_mean = float(np.mean(residuals))
+    res_std = float(np.std(residuals))
+    res_q = np.quantile(residuals, [0.0, 0.25, 0.5, 0.75, 1.0])
+    res_outliers = int(np.sum(np.abs(residuals - res_mean) > 3.0 * res_std)) if res_std > 0 else 0
+    evaluation_metrics['residual_mean'] = res_mean
+    evaluation_metrics['residual_std'] = res_std
+    evaluation_metrics['residual_min'] = float(res_q[0])
+    evaluation_metrics['residual_q25'] = float(res_q[1])
+    evaluation_metrics['residual_median'] = float(res_q[2])
+    evaluation_metrics['residual_q75'] = float(res_q[3])
+    evaluation_metrics['residual_max'] = float(res_q[4])
+    evaluation_metrics['residual_outliers_3sd'] = res_outliers
+    print("  Residual summary (pred - actual):")
+    print(f"    mean: {res_mean:.6f}  std: {res_std:.6f}")
+    print(f"    min/q25/median/q75/max: {res_q[0]:.6f} / {res_q[1]:.6f} / {res_q[2]:.6f} / {res_q[3]:.6f} / {res_q[4]:.6f}")
+    print(f"    |resid|>3sd outliers: {res_outliers}")
+
 # evaluation_metrics contains all calculated statistics
+`,
+  FeatureImportance: `
+import pandas as pd
+import numpy as np
+from sklearn.inspection import permutation_importance
+
+# Feature Importance 모듈 — 순열 특징중요도(결정적, random_state=42).
+# 입력: trained_model(학습된 모델) + dataframe(특징+레이블 포함, 보통 test 분할).
+# 한 특징을 무작위로 섞었을 때 성능이 얼마나 나빠지는가로 그 특징의 기여를 잰다(모델 비의존).
+p_label_column = {label_column}
+p_n_repeats = {n_repeats}
+
+# 특징 컬럼은 학습된 모델에서 가져온다(sklearn이 feature_names_in_ 보존).
+if hasattr(trained_model, 'feature_names_in_'):
+    fi_features = list(trained_model.feature_names_in_)
+else:
+    fi_features = [c for c in dataframe.columns if c != p_label_column]
+
+X_imp = dataframe[fi_features]
+y_imp = dataframe[p_label_column]
+
+_pi = permutation_importance(
+    trained_model, X_imp, y_imp,
+    n_repeats=int(p_n_repeats), random_state=42, n_jobs=1
+)
+
+feature_importances = pd.DataFrame({
+    'feature': fi_features,
+    'importance_mean': _pi.importances_mean,
+    'importance_std': _pi.importances_std,
+}).sort_values('importance_mean', ascending=False).reset_index(drop=True)
+
+print("순열 특징중요도 (높은 순):")
+for _, _row in feature_importances.iterrows():
+    print(f"  {_row['feature']}: {_row['importance_mean']:.6f} +/- {_row['importance_std']:.6f}")
+# 중요도가 낮은 특징부터 가지치기(SelectData/TrainModel feature_columns 조정) 후보로 삼는다.
 `,
   OLSModel: `
 import statsmodels.api as sm
