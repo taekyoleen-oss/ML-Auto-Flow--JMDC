@@ -10502,6 +10502,146 @@ except Exception as e:
   }
 }
 
+/**
+ * 회귀 잔차 진단 플롯(잔차 = 예측 - 실제)을 base64 PNG로 생성합니다(앱 표시용).
+ * 좌: 잔차 vs 실제 산점도(0 기준선) — 체계적 패턴/깔때기 확인.
+ * 우: 잔차 히스토그램 — 치우침(skew)·이상치 확인.
+ * Elston식 "잔차 심문"의 시각화(제9부 28.6). 내보낸 코드/재현성과 무관(앱 표시용).
+ */
+export async function generateResidualPlotPython(
+  data: any[],
+  labelColumn: string,
+  predictionColumn: string,
+  timeoutMs: number = 60000
+): Promise<string> {
+  try {
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    await withTimeout(
+      py.loadPackage(["matplotlib"]),
+      60000,
+      "matplotlib 패키지 설치 타임아웃 (60초 초과)"
+    );
+
+    py.globals.set("js_data", data);
+    py.globals.set("js_label_column", labelColumn);
+    py.globals.set("js_prediction_column", predictionColumn);
+
+    const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import base64
+import io
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+try:
+    df = pd.DataFrame(js_data.to_py())
+    label_column = str(js_label_column)
+    prediction_column = str(js_prediction_column)
+
+    if df.empty:
+        raise ValueError("DataFrame is empty")
+    if label_column not in df.columns:
+        raise ValueError(f"Label column '{label_column}' not found in DataFrame")
+    if prediction_column not in df.columns:
+        raise ValueError(f"Prediction column '{prediction_column}' not found in DataFrame")
+
+    actual = pd.to_numeric(df[label_column], errors='coerce')
+    pred = pd.to_numeric(df[prediction_column], errors='coerce')
+    resid = (pred - actual).dropna()
+    actual_v = actual.loc[resid.index]
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    # 좌: 잔차 vs 실제
+    axes[0].scatter(actual_v, resid, alpha=0.3, color='red', marker='o')
+    axes[0].axhline(0, color='black', linewidth=1)
+    axes[0].set_title("Residuals vs Actual", fontsize=16)
+    axes[0].set_xlabel("Actual")
+    axes[0].set_ylabel("Residual (pred - actual)")
+    axes[0].grid(True, alpha=0.3)
+    # 우: 잔차 히스토그램
+    axes[1].hist(resid, bins=40, color='steelblue', alpha=0.8)
+    axes[1].axvline(0, color='black', linewidth=1)
+    axes[1].set_title("Residual Distribution", fontsize=16)
+    axes[1].set_xlabel("Residual (pred - actual)")
+    axes[1].set_ylabel("Count")
+    axes[1].grid(True, alpha=0.3)
+    plt.tight_layout()
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+    buf.seek(0)
+    image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+    plt.close()
+
+    js_result = {'image_base64': image_base64}
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    js_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+`;
+
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python Residual Plot 실행 타임아웃 (60초 초과)"
+    );
+
+    const resultPyObj = py.globals.get("js_result");
+    if (!resultPyObj) {
+      throw new Error(
+        `Python Residual Plot error: Python code returned None or undefined.`
+      );
+    }
+
+    const result = fromPython(resultPyObj);
+    if (result.__error__) {
+      throw new Error(
+        `Python Residual Plot error:\n${
+          result.error_traceback || result.error_message || "Unknown error"
+        }`
+      );
+    }
+    if (!result.image_base64 || typeof result.image_base64 !== "string") {
+      throw new Error(
+        `Python Residual Plot error: Missing or invalid 'image_base64' in result.`
+      );
+    }
+
+    py.globals.delete("js_data");
+    py.globals.delete("js_label_column");
+    py.globals.delete("js_prediction_column");
+    py.globals.delete("js_result");
+
+    return result.image_base64;
+  } catch (error: any) {
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_label_column");
+        py.globals.delete("js_prediction_column");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python Residual Plot error:\n${errorMessage}`);
+  }
+}
+
 // =====================================================================
 // JMDC Analysis Helpers (PRD v2.0 §17, J1~J7)
 // All analyses run in Python via Pyodide. lifelines is installed lazily

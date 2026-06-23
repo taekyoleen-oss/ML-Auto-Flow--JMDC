@@ -323,6 +323,8 @@ export const EvaluationPreviewModal: React.FC<EvaluationPreviewModalProps> = ({
     // 회귀 모형용 scatter plot 이미지 생성
     const [regressionPlotImage, setRegressionPlotImage] = useState<string | null>(null);
     const [isGeneratingPlot, setIsGeneratingPlot] = useState(false);
+    // 회귀 잔차 진단 플롯(잔차 vs 실제 + 잔차 분포) — 제9부 28.6, 앱 표시용(재현성 무관)
+    const [residualPlotImage, setResidualPlotImage] = useState<string | null>(null);
 
     useEffect(() => {
         if (modelType === 'regression' && getInputData && module.parameters) {
@@ -359,6 +361,36 @@ export const EvaluationPreviewModal: React.FC<EvaluationPreviewModalProps> = ({
             }
         } else {
             setRegressionPlotImage(null);
+        }
+    }, [modelType, getInputData, module.parameters]);
+
+    // 회귀 잔차 진단 플롯 생성(잔차 = 예측 - 실제) — Elston식 "잔차 심문"의 시각화(28.6)
+    useEffect(() => {
+        if (modelType === 'regression' && getInputData && module.parameters) {
+            const labelColumn = module.parameters.label_column;
+            const predictionColumn = module.parameters.prediction_column;
+            if (labelColumn && predictionColumn && getInputData.rows) {
+                const generateResidual = async () => {
+                    try {
+                        const pyodideModule = await import('../utils/pyodideRunner');
+                        const { generateResidualPlotPython } = pyodideModule;
+                        const img = await generateResidualPlotPython(
+                            getInputData.rows || [],
+                            labelColumn,
+                            predictionColumn
+                        );
+                        setResidualPlotImage(img);
+                    } catch (error: any) {
+                        console.error('Failed to generate residual plot:', error);
+                        setResidualPlotImage(null);
+                    }
+                };
+                generateResidual();
+            } else {
+                setResidualPlotImage(null);
+            }
+        } else {
+            setResidualPlotImage(null);
         }
     }, [modelType, getInputData, module.parameters]);
 
@@ -1157,6 +1189,25 @@ export const EvaluationPreviewModal: React.FC<EvaluationPreviewModalProps> = ({
                                     </div>
                                 )}
                             </div>
+
+                            {/* Residual Diagnostics (잔차 진단 — 제9부 28.6) */}
+                            {residualPlotImage && (
+                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+                                    <h3 className="text-lg font-semibold text-gray-700 mb-1 text-center">
+                                        Residual Diagnostics (잔차 진단)
+                                    </h3>
+                                    <p className="text-xs text-gray-500 text-center mb-3">
+                                        잔차 = 예측 − 실제. 좌: 잔차 vs 실제(0 기준선 주위 무작위가 이상적) · 우: 잔차 분포(치우침·이상치 확인)
+                                    </p>
+                                    <div className="flex items-center justify-center">
+                                        <img
+                                            src={`data:image/png;base64,${residualPlotImage}`}
+                                            alt="Residual Diagnostics"
+                                            className="max-w-full h-auto"
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </>
                     )}
                 </main>
