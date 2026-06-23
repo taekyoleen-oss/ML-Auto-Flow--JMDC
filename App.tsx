@@ -6730,6 +6730,161 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
                 addLog("ERROR", `Python SVM 훈련 실패: ${errorMessage}`);
                 throw new Error(`모델 훈련 실패: ${errorMessage}`);
               }
+            } else if (modelSourceModule.type === ModuleType.RandomForest) {
+              // Pyodide를 사용하여 Python으로 Random Forest 훈련 (회귀, 결정적 random_state=42)
+              const modelPurpose = "regression";
+              const nEstimators =
+                parseInt(modelSourceModule.parameters.n_estimators, 10) || 100;
+              const criterion =
+                modelSourceModule.parameters.criterion || "mse";
+              const maxDepth =
+                modelSourceModule.parameters.max_depth === "" ||
+                modelSourceModule.parameters.max_depth === null ||
+                modelSourceModule.parameters.max_depth === undefined
+                  ? null
+                  : parseInt(modelSourceModule.parameters.max_depth, 10);
+              const maxFeatures =
+                modelSourceModule.parameters.max_features === "" ||
+                modelSourceModule.parameters.max_features === null ||
+                modelSourceModule.parameters.max_features === undefined
+                  ? null
+                  : modelSourceModule.parameters.max_features;
+
+              if (X.length < ordered_feature_columns.length) {
+                throw new Error(
+                  `Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but got ${X.length}.`
+                );
+              }
+
+              try {
+                addLog(
+                  "INFO",
+                  `Pyodide를 사용하여 Python으로 Random Forest 모델 훈련 중...`
+                );
+
+                const pyodideModule = await import("./utils/pyodideRunner");
+                const { fitRandomForestPython } = pyodideModule;
+
+                const fitResult = await fitRandomForestPython(
+                  X,
+                  y,
+                  modelPurpose,
+                  nEstimators,
+                  criterion,
+                  maxDepth,
+                  maxFeatures,
+                  ordered_feature_columns,
+                  60000
+                );
+
+                intercept = 0;
+                if (
+                  fitResult.featureImportances &&
+                  Object.keys(fitResult.featureImportances).length > 0
+                ) {
+                  ordered_feature_columns.forEach((col) => {
+                    coefficients[col] = fitResult.featureImportances[col] || 0;
+                  });
+                } else {
+                  ordered_feature_columns.forEach((col) => {
+                    coefficients[col] = 0;
+                  });
+                }
+
+                metrics["R-squared"] = parseFloat(
+                  (fitResult.metrics["R-squared"] || 0).toFixed(4)
+                );
+                metrics["Mean Squared Error"] = parseFloat(
+                  (fitResult.metrics["Mean Squared Error"] || 0).toFixed(4)
+                );
+                metrics["Root Mean Squared Error"] = parseFloat(
+                  (fitResult.metrics["Root Mean Squared Error"] || 0).toFixed(4)
+                );
+                metrics["Mean Absolute Error"] = parseFloat(
+                  (fitResult.metrics["Mean Absolute Error"] || 0).toFixed(4)
+                );
+
+                addLog("SUCCESS", `Python으로 Random Forest 모델 훈련 완료`);
+              } catch (error: any) {
+                const errorMessage = error.message || String(error);
+                addLog(
+                  "ERROR",
+                  `Python Random Forest 훈련 실패: ${errorMessage}`
+                );
+                throw new Error(`모델 훈련 실패: ${errorMessage}`);
+              }
+            } else if (modelSourceModule.type === ModuleType.GradientBoosting) {
+              // Pyodide를 사용하여 Python으로 Gradient Boosting 훈련 (회귀, 결정적 random_state=42)
+              const modelPurpose = "regression";
+              const nEstimators =
+                parseInt(modelSourceModule.parameters.n_estimators, 10) || 100;
+              const learningRate =
+                parseFloat(modelSourceModule.parameters.learning_rate) || 0.1;
+              const maxDepth =
+                parseInt(modelSourceModule.parameters.max_depth, 10) || 3;
+
+              if (X.length < ordered_feature_columns.length) {
+                throw new Error(
+                  `Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but got ${X.length}.`
+                );
+              }
+
+              try {
+                addLog(
+                  "INFO",
+                  `Pyodide를 사용하여 Python으로 Gradient Boosting 모델 훈련 중...`
+                );
+
+                const pyodideModule = await import("./utils/pyodideRunner");
+                const { fitGradientBoostingPython } = pyodideModule;
+
+                const fitResult = await fitGradientBoostingPython(
+                  X,
+                  y,
+                  modelPurpose,
+                  nEstimators,
+                  learningRate,
+                  maxDepth,
+                  ordered_feature_columns,
+                  60000
+                );
+
+                intercept = 0;
+                if (
+                  fitResult.featureImportances &&
+                  Object.keys(fitResult.featureImportances).length > 0
+                ) {
+                  ordered_feature_columns.forEach((col) => {
+                    coefficients[col] = fitResult.featureImportances[col] || 0;
+                  });
+                } else {
+                  ordered_feature_columns.forEach((col) => {
+                    coefficients[col] = 0;
+                  });
+                }
+
+                metrics["R-squared"] = parseFloat(
+                  (fitResult.metrics["R-squared"] || 0).toFixed(4)
+                );
+                metrics["Mean Squared Error"] = parseFloat(
+                  (fitResult.metrics["Mean Squared Error"] || 0).toFixed(4)
+                );
+                metrics["Root Mean Squared Error"] = parseFloat(
+                  (fitResult.metrics["Root Mean Squared Error"] || 0).toFixed(4)
+                );
+                metrics["Mean Absolute Error"] = parseFloat(
+                  (fitResult.metrics["Mean Absolute Error"] || 0).toFixed(4)
+                );
+
+                addLog("SUCCESS", `Python으로 Gradient Boosting 모델 훈련 완료`);
+              } catch (error: any) {
+                const errorMessage = error.message || String(error);
+                addLog(
+                  "ERROR",
+                  `Python Gradient Boosting 훈련 실패: ${errorMessage}`
+                );
+                throw new Error(`모델 훈련 실패: ${errorMessage}`);
+              }
             } else {
               // For other regression models, use simulation for now
               intercept = Math.random() * 10;
@@ -7882,6 +8037,171 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
                 );
                 throw new Error(`모델 훈련 실패: ${errorMessage}`);
               }
+            } else if (modelSourceModule.type === ModuleType.RandomForest) {
+              // Pyodide를 사용하여 Python으로 Random Forest 훈련 (분류, 결정적 random_state=42)
+              const modelPurpose = "classification";
+              const nEstimators =
+                parseInt(modelSourceModule.parameters.n_estimators, 10) || 100;
+              const criterion =
+                modelSourceModule.parameters.criterion || "gini";
+              const maxDepth =
+                modelSourceModule.parameters.max_depth === "" ||
+                modelSourceModule.parameters.max_depth === null ||
+                modelSourceModule.parameters.max_depth === undefined
+                  ? null
+                  : parseInt(modelSourceModule.parameters.max_depth, 10);
+              const maxFeatures =
+                modelSourceModule.parameters.max_features === "" ||
+                modelSourceModule.parameters.max_features === null ||
+                modelSourceModule.parameters.max_features === undefined
+                  ? null
+                  : modelSourceModule.parameters.max_features;
+
+              if (X.length < ordered_feature_columns.length) {
+                throw new Error(
+                  `Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but got ${X.length}.`
+                );
+              }
+
+              try {
+                addLog(
+                  "INFO",
+                  `Pyodide를 사용하여 Python으로 Random Forest 모델 훈련 중...`
+                );
+
+                const pyodideModule = await import("./utils/pyodideRunner");
+                const { fitRandomForestPython } = pyodideModule;
+
+                const fitResult = await fitRandomForestPython(
+                  X,
+                  y,
+                  modelPurpose,
+                  nEstimators,
+                  criterion,
+                  maxDepth,
+                  maxFeatures,
+                  ordered_feature_columns,
+                  60000
+                );
+
+                intercept = 0;
+                if (
+                  fitResult.featureImportances &&
+                  Object.keys(fitResult.featureImportances).length > 0
+                ) {
+                  ordered_feature_columns.forEach((col) => {
+                    coefficients[col] = fitResult.featureImportances[col] || 0;
+                  });
+                } else {
+                  ordered_feature_columns.forEach((col) => {
+                    coefficients[col] = 0;
+                  });
+                }
+
+                metrics["Accuracy"] = parseFloat(
+                  (fitResult.metrics["Accuracy"] || 0).toFixed(4)
+                );
+                metrics["Precision"] = parseFloat(
+                  (fitResult.metrics["Precision"] || 0).toFixed(4)
+                );
+                metrics["Recall"] = parseFloat(
+                  (fitResult.metrics["Recall"] || 0).toFixed(4)
+                );
+                metrics["F1-Score"] = parseFloat(
+                  (fitResult.metrics["F1-Score"] || 0).toFixed(4)
+                );
+                if (fitResult.metrics["ROC-AUC"] !== undefined) {
+                  metrics["ROC-AUC"] = parseFloat(
+                    (fitResult.metrics["ROC-AUC"] || 0).toFixed(4)
+                  );
+                }
+
+                addLog("SUCCESS", `Python으로 Random Forest 모델 훈련 완료`);
+              } catch (error: any) {
+                const errorMessage = error.message || String(error);
+                addLog(
+                  "ERROR",
+                  `Python Random Forest 훈련 실패: ${errorMessage}`
+                );
+                throw new Error(`모델 훈련 실패: ${errorMessage}`);
+              }
+            } else if (modelSourceModule.type === ModuleType.GradientBoosting) {
+              // Pyodide를 사용하여 Python으로 Gradient Boosting 훈련 (분류, 결정적 random_state=42)
+              const modelPurpose = "classification";
+              const nEstimators =
+                parseInt(modelSourceModule.parameters.n_estimators, 10) || 100;
+              const learningRate =
+                parseFloat(modelSourceModule.parameters.learning_rate) || 0.1;
+              const maxDepth =
+                parseInt(modelSourceModule.parameters.max_depth, 10) || 3;
+
+              if (X.length < ordered_feature_columns.length) {
+                throw new Error(
+                  `Insufficient data: need at least ${ordered_feature_columns.length} samples for ${ordered_feature_columns.length} features, but got ${X.length}.`
+                );
+              }
+
+              try {
+                addLog(
+                  "INFO",
+                  `Pyodide를 사용하여 Python으로 Gradient Boosting 모델 훈련 중...`
+                );
+
+                const pyodideModule = await import("./utils/pyodideRunner");
+                const { fitGradientBoostingPython } = pyodideModule;
+
+                const fitResult = await fitGradientBoostingPython(
+                  X,
+                  y,
+                  modelPurpose,
+                  nEstimators,
+                  learningRate,
+                  maxDepth,
+                  ordered_feature_columns,
+                  60000
+                );
+
+                intercept = 0;
+                if (
+                  fitResult.featureImportances &&
+                  Object.keys(fitResult.featureImportances).length > 0
+                ) {
+                  ordered_feature_columns.forEach((col) => {
+                    coefficients[col] = fitResult.featureImportances[col] || 0;
+                  });
+                } else {
+                  ordered_feature_columns.forEach((col) => {
+                    coefficients[col] = 0;
+                  });
+                }
+
+                metrics["Accuracy"] = parseFloat(
+                  (fitResult.metrics["Accuracy"] || 0).toFixed(4)
+                );
+                metrics["Precision"] = parseFloat(
+                  (fitResult.metrics["Precision"] || 0).toFixed(4)
+                );
+                metrics["Recall"] = parseFloat(
+                  (fitResult.metrics["Recall"] || 0).toFixed(4)
+                );
+                metrics["F1-Score"] = parseFloat(
+                  (fitResult.metrics["F1-Score"] || 0).toFixed(4)
+                );
+                if (fitResult.metrics["ROC-AUC"] !== undefined) {
+                  metrics["ROC-AUC"] = parseFloat(
+                    (fitResult.metrics["ROC-AUC"] || 0).toFixed(4)
+                  );
+                }
+
+                addLog("SUCCESS", `Python으로 Gradient Boosting 모델 훈련 완료`);
+              } catch (error: any) {
+                const errorMessage = error.message || String(error);
+                addLog(
+                  "ERROR",
+                  `Python Gradient Boosting 훈련 실패: ${errorMessage}`
+                );
+                throw new Error(`모델 훈련 실패: ${errorMessage}`);
+              }
             } else {
               // For other classification models, use simulation for now
               intercept = Math.random() - 0.5;
@@ -7976,14 +8296,16 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
           );
           const labelColumn = trainedModel.labelColumn;
 
-          // KNN, Decision Tree, SVM, LDA, NaiveBayes 모델의 경우 별도 처리 (coefficients/intercept가 없는 모델)
+          // KNN, Decision Tree, SVM, LDA, NaiveBayes, RandomForest, GradientBoosting 모델의 경우 별도 처리 (coefficients/intercept가 없는 모델 → 훈련 데이터로 재적합 후 예측)
           if (
             trainedModel.modelType === ModuleType.KNN ||
             trainedModel.modelType === ModuleType.DecisionTree ||
             trainedModel.modelType === ModuleType.NeuralNetwork ||
             trainedModel.modelType === ModuleType.SVM ||
             trainedModel.modelType === ModuleType.LinearDiscriminantAnalysis ||
-            trainedModel.modelType === ModuleType.NaiveBayes
+            trainedModel.modelType === ModuleType.NaiveBayes ||
+            trainedModel.modelType === ModuleType.RandomForest ||
+            trainedModel.modelType === ModuleType.GradientBoosting
           ) {
             // Train Model 모듈에서 훈련 데이터 가져오기
             const trainModelModule = currentModules.find(
@@ -8269,6 +8591,80 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
                 );
 
                 addLog("SUCCESS", "Python으로 Naive Bayes 모델 예측 완료");
+              } else if (
+                trainedModel.modelType === ModuleType.RandomForest
+              ) {
+                addLog(
+                  "INFO",
+                  "Pyodide를 사용하여 Python으로 Random Forest 모델 예측 수행 중..."
+                );
+
+                const nEstimators =
+                  parseInt(modelDefModule.parameters.n_estimators, 10) || 100;
+                const criterion =
+                  modelDefModule.parameters.criterion ||
+                  (modelIsClassification ? "gini" : "mse");
+                const maxDepth =
+                  modelDefModule.parameters.max_depth === "" ||
+                  modelDefModule.parameters.max_depth === null ||
+                  modelDefModule.parameters.max_depth === undefined
+                    ? null
+                    : parseInt(modelDefModule.parameters.max_depth, 10);
+                const maxFeatures =
+                  modelDefModule.parameters.max_features === "" ||
+                  modelDefModule.parameters.max_features === null ||
+                  modelDefModule.parameters.max_features === undefined
+                    ? null
+                    : modelDefModule.parameters.max_features;
+
+                const { scoreRandomForestPython } = pyodideModule;
+                result = await scoreRandomForestPython(
+                  inputData.rows || [],
+                  trainedModel.featureColumns,
+                  labelColumn,
+                  modelIsClassification ? "classification" : "regression",
+                  nEstimators,
+                  criterion,
+                  maxDepth,
+                  maxFeatures,
+                  trainingData.rows || [],
+                  trainedModel.featureColumns,
+                  labelColumn,
+                  60000
+                );
+
+                addLog("SUCCESS", "Python으로 Random Forest 모델 예측 완료");
+              } else if (
+                trainedModel.modelType === ModuleType.GradientBoosting
+              ) {
+                addLog(
+                  "INFO",
+                  "Pyodide를 사용하여 Python으로 Gradient Boosting 모델 예측 수행 중..."
+                );
+
+                const nEstimators =
+                  parseInt(modelDefModule.parameters.n_estimators, 10) || 100;
+                const learningRate =
+                  parseFloat(modelDefModule.parameters.learning_rate) || 0.1;
+                const maxDepth =
+                  parseInt(modelDefModule.parameters.max_depth, 10) || 3;
+
+                const { scoreGradientBoostingPython } = pyodideModule;
+                result = await scoreGradientBoostingPython(
+                  inputData.rows || [],
+                  trainedModel.featureColumns,
+                  labelColumn,
+                  modelIsClassification ? "classification" : "regression",
+                  nEstimators,
+                  learningRate,
+                  maxDepth,
+                  trainingData.rows || [],
+                  trainedModel.featureColumns,
+                  labelColumn,
+                  60000
+                );
+
+                addLog("SUCCESS", "Python으로 Gradient Boosting 모델 예측 완료");
               } else {
                 throw new Error(
                   `Unsupported model type for ScoreModel: ${trainedModel.modelType}`

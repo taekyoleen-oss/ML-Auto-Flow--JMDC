@@ -4336,6 +4336,754 @@ except Exception as e:
 }
 
 /**
+ * Random Forest 모델을 Python(sklearn)으로 훈련합니다 (인앱 실행, 결정적 random_state=42).
+ * codeSnippets.ts RandomForest 템플릿 / data_analysis_modules.create_random_forest와 정합.
+ * 타임아웃: 60초
+ */
+export async function fitRandomForestPython(
+  X: number[][],
+  y: number[],
+  modelPurpose: string = "classification",
+  nEstimators: number = 100,
+  criterion: string = "gini",
+  maxDepth: number | null = null,
+  maxFeatures: string | number | null = null,
+  featureColumns?: string[],
+  timeoutMs: number = 60000
+): Promise<{
+  metrics: Record<string, number>;
+  featureImportances?: Record<string, number>;
+}> {
+  try {
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    const dataRows: any[] = [];
+    for (let i = 0; i < X.length; i++) {
+      const row: any = {};
+      if (featureColumns) {
+        featureColumns.forEach((col, idx) => {
+          row[col] = X[i][idx];
+        });
+      } else {
+        X[i].forEach((val, idx) => {
+          row[`x${idx}`] = val;
+        });
+      }
+      row["y"] = y[i];
+      dataRows.push(row);
+    }
+
+    py.globals.set("js_data", dataRows);
+    py.globals.set(
+      "js_feature_columns",
+      featureColumns || X[0].map((_, idx) => `x${idx}`)
+    );
+    py.globals.set("js_label_column", "y");
+
+    const maxFeaturesLiteral =
+      maxFeatures === null ||
+      maxFeatures === undefined ||
+      maxFeatures === "" ||
+      maxFeatures === "null"
+        ? "None"
+        : !isNaN(Number(maxFeatures)) && `${maxFeatures}`.trim() !== ""
+        ? `${Number(maxFeatures)}`
+        : `'${maxFeatures}'`;
+
+    const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import sys
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, mean_squared_error, r2_score, mean_absolute_error
+
+try:
+    dataframe = pd.DataFrame(js_data.to_py())
+    p_feature_columns = js_feature_columns.to_py()
+    p_label_column = str(js_label_column)
+
+    if dataframe.empty:
+        raise ValueError("DataFrame is empty")
+    if len(p_feature_columns) == 0:
+        raise ValueError("No feature columns specified")
+    if p_label_column not in dataframe.columns:
+        raise ValueError(f"Label column '{p_label_column}' not found in DataFrame")
+
+    X_train = dataframe[p_feature_columns]
+    y_train = dataframe[p_label_column]
+
+    p_model_purpose = '${modelPurpose}'
+    p_n_estimators = ${nEstimators}
+    p_criterion = '${criterion}'
+    p_max_depth = ${maxDepth !== null ? maxDepth : "None"}
+    p_max_features = ${maxFeaturesLiteral}
+
+    if p_model_purpose == 'classification':
+        model = RandomForestClassifier(
+            n_estimators=p_n_estimators,
+            criterion=p_criterion.lower(),
+            max_depth=p_max_depth,
+            max_features=p_max_features,
+            random_state=42
+        )
+    else:
+        criterion_reg = 'squared_error' if p_criterion == 'mse' else 'absolute_error'
+        model = RandomForestRegressor(
+            n_estimators=p_n_estimators,
+            criterion=criterion_reg,
+            max_depth=p_max_depth,
+            max_features=p_max_features,
+            random_state=42
+        )
+
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_train)
+
+    if p_model_purpose == 'classification':
+        accuracy = float(accuracy_score(y_train, y_pred))
+        unique_labels = np.unique(y_train)
+        is_binary = len(unique_labels) == 2
+        avg_param = 'binary' if is_binary else 'weighted'
+        precision = float(precision_score(y_train, y_pred, average=avg_param, zero_division=0))
+        recall = float(recall_score(y_train, y_pred, average=avg_param, zero_division=0))
+        f1 = float(f1_score(y_train, y_pred, average=avg_param, zero_division=0))
+        metrics_dict = {
+            'Accuracy': accuracy,
+            'Precision': precision,
+            'Recall': recall,
+            'F1-Score': f1
+        }
+        if is_binary:
+            try:
+                y_pred_proba = model.predict_proba(X_train)[:, 1]
+                metrics_dict['ROC-AUC'] = float(roc_auc_score(y_train, y_pred_proba))
+            except Exception:
+                pass
+    else:
+        mse = float(mean_squared_error(y_train, y_pred))
+        rmse = float(np.sqrt(mse))
+        mae = float(mean_absolute_error(y_train, y_pred))
+        r2 = float(r2_score(y_train, y_pred))
+        metrics_dict = {
+            'R-squared': r2,
+            'Mean Squared Error': mse,
+            'Root Mean Squared Error': rmse,
+            'Mean Absolute Error': mae
+        }
+
+    feature_importances = {}
+    if hasattr(model, 'feature_importances_'):
+        importances = model.feature_importances_
+        for i, feature in enumerate(p_feature_columns):
+            feature_importances[feature] = float(importances[i])
+
+    result = {
+        'metrics': metrics_dict,
+        'feature_columns': p_feature_columns,
+        'feature_importances': feature_importances
+    }
+    js_result = result
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    js_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+`;
+
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python Random Forest 실행 타임아웃 (60초 초과)"
+    );
+
+    const resultPyObj = py.globals.get("js_result");
+    if (!resultPyObj) {
+      throw new Error(
+        `Python Random Forest error: Python code returned None or undefined.`
+      );
+    }
+    const result = fromPython(resultPyObj);
+    if (result.__error__) {
+      throw new Error(
+        `Python Random Forest error:\n${
+          result.error_traceback || result.error_message || "Unknown error"
+        }`
+      );
+    }
+    if (!result.metrics || typeof result.metrics !== "object") {
+      throw new Error(
+        `Python Random Forest error: Missing or invalid 'metrics' in result.`
+      );
+    }
+
+    py.globals.delete("js_data");
+    py.globals.delete("js_feature_columns");
+    py.globals.delete("js_label_column");
+    py.globals.delete("js_result");
+
+    return {
+      metrics: result.metrics,
+      featureImportances: result.feature_importances || {},
+    };
+  } catch (error: any) {
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_feature_columns");
+        py.globals.delete("js_label_column");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python Random Forest error:\n${errorMessage}`);
+  }
+}
+
+/**
+ * Gradient Boosting 모델을 Python(sklearn)으로 훈련합니다 (인앱 실행, 결정적 random_state=42).
+ * codeSnippets.ts GradientBoosting 템플릿 / data_analysis_modules.create_gradient_boosting와 정합.
+ * 타임아웃: 60초
+ */
+export async function fitGradientBoostingPython(
+  X: number[][],
+  y: number[],
+  modelPurpose: string = "classification",
+  nEstimators: number = 100,
+  learningRate: number = 0.1,
+  maxDepth: number = 3,
+  featureColumns?: string[],
+  timeoutMs: number = 60000
+): Promise<{
+  metrics: Record<string, number>;
+  featureImportances?: Record<string, number>;
+}> {
+  try {
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    const dataRows: any[] = [];
+    for (let i = 0; i < X.length; i++) {
+      const row: any = {};
+      if (featureColumns) {
+        featureColumns.forEach((col, idx) => {
+          row[col] = X[i][idx];
+        });
+      } else {
+        X[i].forEach((val, idx) => {
+          row[`x${idx}`] = val;
+        });
+      }
+      row["y"] = y[i];
+      dataRows.push(row);
+    }
+
+    py.globals.set("js_data", dataRows);
+    py.globals.set(
+      "js_feature_columns",
+      featureColumns || X[0].map((_, idx) => `x${idx}`)
+    );
+    py.globals.set("js_label_column", "y");
+
+    const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import sys
+from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, mean_squared_error, r2_score, mean_absolute_error
+
+try:
+    dataframe = pd.DataFrame(js_data.to_py())
+    p_feature_columns = js_feature_columns.to_py()
+    p_label_column = str(js_label_column)
+
+    if dataframe.empty:
+        raise ValueError("DataFrame is empty")
+    if len(p_feature_columns) == 0:
+        raise ValueError("No feature columns specified")
+    if p_label_column not in dataframe.columns:
+        raise ValueError(f"Label column '{p_label_column}' not found in DataFrame")
+
+    X_train = dataframe[p_feature_columns]
+    y_train = dataframe[p_label_column]
+
+    p_model_purpose = '${modelPurpose}'
+    p_n_estimators = ${nEstimators}
+    p_learning_rate = ${learningRate}
+    p_max_depth = ${maxDepth}
+
+    if p_model_purpose == 'classification':
+        model = GradientBoostingClassifier(
+            n_estimators=p_n_estimators,
+            learning_rate=p_learning_rate,
+            max_depth=p_max_depth,
+            random_state=42
+        )
+    else:
+        model = GradientBoostingRegressor(
+            n_estimators=p_n_estimators,
+            learning_rate=p_learning_rate,
+            max_depth=p_max_depth,
+            random_state=42
+        )
+
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_train)
+
+    if p_model_purpose == 'classification':
+        accuracy = float(accuracy_score(y_train, y_pred))
+        unique_labels = np.unique(y_train)
+        is_binary = len(unique_labels) == 2
+        avg_param = 'binary' if is_binary else 'weighted'
+        precision = float(precision_score(y_train, y_pred, average=avg_param, zero_division=0))
+        recall = float(recall_score(y_train, y_pred, average=avg_param, zero_division=0))
+        f1 = float(f1_score(y_train, y_pred, average=avg_param, zero_division=0))
+        metrics_dict = {
+            'Accuracy': accuracy,
+            'Precision': precision,
+            'Recall': recall,
+            'F1-Score': f1
+        }
+        if is_binary:
+            try:
+                y_pred_proba = model.predict_proba(X_train)[:, 1]
+                metrics_dict['ROC-AUC'] = float(roc_auc_score(y_train, y_pred_proba))
+            except Exception:
+                pass
+    else:
+        mse = float(mean_squared_error(y_train, y_pred))
+        rmse = float(np.sqrt(mse))
+        mae = float(mean_absolute_error(y_train, y_pred))
+        r2 = float(r2_score(y_train, y_pred))
+        metrics_dict = {
+            'R-squared': r2,
+            'Mean Squared Error': mse,
+            'Root Mean Squared Error': rmse,
+            'Mean Absolute Error': mae
+        }
+
+    feature_importances = {}
+    if hasattr(model, 'feature_importances_'):
+        importances = model.feature_importances_
+        for i, feature in enumerate(p_feature_columns):
+            feature_importances[feature] = float(importances[i])
+
+    result = {
+        'metrics': metrics_dict,
+        'feature_columns': p_feature_columns,
+        'feature_importances': feature_importances
+    }
+    js_result = result
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    js_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+`;
+
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python Gradient Boosting 실행 타임아웃 (60초 초과)"
+    );
+
+    const resultPyObj = py.globals.get("js_result");
+    if (!resultPyObj) {
+      throw new Error(
+        `Python Gradient Boosting error: Python code returned None or undefined.`
+      );
+    }
+    const result = fromPython(resultPyObj);
+    if (result.__error__) {
+      throw new Error(
+        `Python Gradient Boosting error:\n${
+          result.error_traceback || result.error_message || "Unknown error"
+        }`
+      );
+    }
+    if (!result.metrics || typeof result.metrics !== "object") {
+      throw new Error(
+        `Python Gradient Boosting error: Missing or invalid 'metrics' in result.`
+      );
+    }
+
+    py.globals.delete("js_data");
+    py.globals.delete("js_feature_columns");
+    py.globals.delete("js_label_column");
+    py.globals.delete("js_result");
+
+    return {
+      metrics: result.metrics,
+      featureImportances: result.feature_importances || {},
+    };
+  } catch (error: any) {
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_feature_columns");
+        py.globals.delete("js_label_column");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python Gradient Boosting error:\n${errorMessage}`);
+  }
+}
+
+/**
+ * Random Forest ScoreModel: 훈련 데이터로 모델을 재적합한 뒤 입력 데이터를 예측합니다
+ * (결정적 random_state=42). scoreDecisionTreePython 패턴 미러.
+ */
+export async function scoreRandomForestPython(
+  data: any[],
+  featureColumns: string[],
+  labelColumn: string,
+  modelPurpose: "classification" | "regression",
+  nEstimators: number,
+  criterion: string,
+  maxDepth: number | null,
+  maxFeatures: string | number | null,
+  trainingData: any[],
+  trainingFeatureColumns: string[],
+  trainingLabelColumn: string,
+  timeoutMs: number = 60000
+): Promise<{ rows: any[]; columns: Array<{ name: string; type: string }> }> {
+  try {
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    py.globals.set("js_data", data);
+    py.globals.set("js_feature_columns", featureColumns);
+    py.globals.set("js_label_column", labelColumn);
+    py.globals.set("js_model_purpose", modelPurpose);
+    py.globals.set("js_training_data", trainingData);
+    py.globals.set("js_training_feature_columns", trainingFeatureColumns);
+    py.globals.set("js_training_label_column", trainingLabelColumn);
+
+    const maxFeaturesLiteral =
+      maxFeatures === null ||
+      maxFeatures === undefined ||
+      maxFeatures === "" ||
+      maxFeatures === "null"
+        ? "None"
+        : !isNaN(Number(maxFeatures)) && `${maxFeatures}`.trim() !== ""
+        ? `${Number(maxFeatures)}`
+        : `'${maxFeatures}'`;
+
+    const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import sys
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+
+try:
+    df = pd.DataFrame(js_data.to_py())
+    feature_columns = js_feature_columns.to_py()
+    label_column = str(js_label_column)
+    model_purpose = str(js_model_purpose)
+
+    training_df = pd.DataFrame(js_training_data.to_py())
+    training_feature_columns = js_training_feature_columns.to_py()
+    training_label_column = str(js_training_label_column)
+
+    p_n_estimators = ${nEstimators}
+    p_criterion = '${criterion}'
+    p_max_depth = ${maxDepth !== null ? maxDepth : "None"}
+    p_max_features = ${maxFeaturesLiteral}
+
+    X_train = training_df[training_feature_columns]
+    y_train = training_df[training_label_column]
+
+    if model_purpose == 'classification':
+        model = RandomForestClassifier(
+            n_estimators=p_n_estimators,
+            criterion=p_criterion.lower(),
+            max_depth=p_max_depth,
+            max_features=p_max_features,
+            random_state=42
+        )
+    else:
+        criterion_reg = 'squared_error' if p_criterion == 'mse' else 'absolute_error'
+        model = RandomForestRegressor(
+            n_estimators=p_n_estimators,
+            criterion=criterion_reg,
+            max_depth=p_max_depth,
+            max_features=p_max_features,
+            random_state=42
+        )
+
+    model.fit(X_train, y_train)
+    X = df[feature_columns]
+    predictions = model.predict(X)
+
+    result_df = df.copy()
+    result_df['Predict'] = predictions
+
+    if model_purpose == 'classification':
+        try:
+            probabilities = model.predict_proba(X)
+            if probabilities.shape[1] == 2:
+                result_df[f"{label_column}_Predict_Proba_0"] = probabilities[:, 0]
+                result_df[f"{label_column}_Predict_Proba_1"] = probabilities[:, 1]
+            else:
+                for i in range(probabilities.shape[1]):
+                    result_df[f"{label_column}_Predict_Proba_{i}"] = probabilities[:, i]
+        except Exception:
+            pass
+
+    result_rows = result_df.to_dict('records')
+    result_columns = [{'name': col, 'type': str(result_df[col].dtype)} for col in result_df.columns]
+    js_result = {'rows': result_rows, 'columns': result_columns}
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    js_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+`;
+
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python Random Forest ScoreModel 실행 타임아웃 (60초 초과)"
+    );
+
+    const resultPyObj = py.globals.get("js_result");
+    if (!resultPyObj) {
+      throw new Error(
+        `Python Random Forest ScoreModel error: Python code returned None or undefined.`
+      );
+    }
+    const result = fromPython(resultPyObj);
+    if (result && result.__error__) {
+      throw new Error(
+        `Python Random Forest ScoreModel error:\n${
+          result.error_traceback || result.error_message || "Unknown error"
+        }`
+      );
+    }
+    if (!result || !result.rows || !result.columns) {
+      throw new Error(
+        `Python Random Forest ScoreModel error: Missing or invalid 'rows' or 'columns' in result.`
+      );
+    }
+
+    py.globals.delete("js_data");
+    py.globals.delete("js_feature_columns");
+    py.globals.delete("js_label_column");
+    py.globals.delete("js_model_purpose");
+    py.globals.delete("js_training_data");
+    py.globals.delete("js_training_feature_columns");
+    py.globals.delete("js_training_label_column");
+    py.globals.delete("js_result");
+
+    return { rows: result.rows, columns: result.columns };
+  } catch (error: any) {
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_feature_columns");
+        py.globals.delete("js_label_column");
+        py.globals.delete("js_model_purpose");
+        py.globals.delete("js_training_data");
+        py.globals.delete("js_training_feature_columns");
+        py.globals.delete("js_training_label_column");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python Random Forest ScoreModel error: ${errorMessage}`);
+  }
+}
+
+/**
+ * Gradient Boosting ScoreModel: 훈련 데이터로 모델을 재적합한 뒤 입력 데이터를 예측합니다
+ * (결정적 random_state=42). scoreDecisionTreePython 패턴 미러.
+ */
+export async function scoreGradientBoostingPython(
+  data: any[],
+  featureColumns: string[],
+  labelColumn: string,
+  modelPurpose: "classification" | "regression",
+  nEstimators: number,
+  learningRate: number,
+  maxDepth: number,
+  trainingData: any[],
+  trainingFeatureColumns: string[],
+  trainingLabelColumn: string,
+  timeoutMs: number = 60000
+): Promise<{ rows: any[]; columns: Array<{ name: string; type: string }> }> {
+  try {
+    const py = await withTimeout(
+      loadPyodide(30000),
+      30000,
+      "Pyodide 로딩 타임아웃 (30초 초과)"
+    );
+
+    py.globals.set("js_data", data);
+    py.globals.set("js_feature_columns", featureColumns);
+    py.globals.set("js_label_column", labelColumn);
+    py.globals.set("js_model_purpose", modelPurpose);
+    py.globals.set("js_training_data", trainingData);
+    py.globals.set("js_training_feature_columns", trainingFeatureColumns);
+    py.globals.set("js_training_label_column", trainingLabelColumn);
+
+    const code = `
+import json
+import numpy as np
+import pandas as pd
+import traceback
+import sys
+from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
+
+try:
+    df = pd.DataFrame(js_data.to_py())
+    feature_columns = js_feature_columns.to_py()
+    label_column = str(js_label_column)
+    model_purpose = str(js_model_purpose)
+
+    training_df = pd.DataFrame(js_training_data.to_py())
+    training_feature_columns = js_training_feature_columns.to_py()
+    training_label_column = str(js_training_label_column)
+
+    p_n_estimators = ${nEstimators}
+    p_learning_rate = ${learningRate}
+    p_max_depth = ${maxDepth}
+
+    X_train = training_df[training_feature_columns]
+    y_train = training_df[training_label_column]
+
+    if model_purpose == 'classification':
+        model = GradientBoostingClassifier(
+            n_estimators=p_n_estimators,
+            learning_rate=p_learning_rate,
+            max_depth=p_max_depth,
+            random_state=42
+        )
+    else:
+        model = GradientBoostingRegressor(
+            n_estimators=p_n_estimators,
+            learning_rate=p_learning_rate,
+            max_depth=p_max_depth,
+            random_state=42
+        )
+
+    model.fit(X_train, y_train)
+    X = df[feature_columns]
+    predictions = model.predict(X)
+
+    result_df = df.copy()
+    result_df['Predict'] = predictions
+
+    if model_purpose == 'classification':
+        try:
+            probabilities = model.predict_proba(X)
+            if probabilities.shape[1] == 2:
+                result_df[f"{label_column}_Predict_Proba_0"] = probabilities[:, 0]
+                result_df[f"{label_column}_Predict_Proba_1"] = probabilities[:, 1]
+            else:
+                for i in range(probabilities.shape[1]):
+                    result_df[f"{label_column}_Predict_Proba_{i}"] = probabilities[:, i]
+        except Exception:
+            pass
+
+    result_rows = result_df.to_dict('records')
+    result_columns = [{'name': col, 'type': str(result_df[col].dtype)} for col in result_df.columns]
+    js_result = {'rows': result_rows, 'columns': result_columns}
+except Exception as e:
+    error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+    js_result = {
+        '__error__': True,
+        'error_type': type(e).__name__,
+        'error_message': str(e),
+        'error_traceback': error_traceback
+    }
+`;
+
+    await withTimeout(
+      Promise.resolve(py.runPython(code)),
+      timeoutMs,
+      "Python Gradient Boosting ScoreModel 실행 타임아웃 (60초 초과)"
+    );
+
+    const resultPyObj = py.globals.get("js_result");
+    if (!resultPyObj) {
+      throw new Error(
+        `Python Gradient Boosting ScoreModel error: Python code returned None or undefined.`
+      );
+    }
+    const result = fromPython(resultPyObj);
+    if (result && result.__error__) {
+      throw new Error(
+        `Python Gradient Boosting ScoreModel error:\n${
+          result.error_traceback || result.error_message || "Unknown error"
+        }`
+      );
+    }
+    if (!result || !result.rows || !result.columns) {
+      throw new Error(
+        `Python Gradient Boosting ScoreModel error: Missing or invalid 'rows' or 'columns' in result.`
+      );
+    }
+
+    py.globals.delete("js_data");
+    py.globals.delete("js_feature_columns");
+    py.globals.delete("js_label_column");
+    py.globals.delete("js_model_purpose");
+    py.globals.delete("js_training_data");
+    py.globals.delete("js_training_feature_columns");
+    py.globals.delete("js_training_label_column");
+    py.globals.delete("js_result");
+
+    return { rows: result.rows, columns: result.columns };
+  } catch (error: any) {
+    try {
+      const py = pyodide;
+      if (py) {
+        py.globals.delete("js_data");
+        py.globals.delete("js_feature_columns");
+        py.globals.delete("js_label_column");
+        py.globals.delete("js_model_purpose");
+        py.globals.delete("js_training_data");
+        py.globals.delete("js_training_feature_columns");
+        py.globals.delete("js_training_label_column");
+        py.globals.delete("js_result");
+      }
+    } catch {}
+    const errorMessage = error.message || String(error);
+    throw new Error(
+      `Python Gradient Boosting ScoreModel error: ${errorMessage}`
+    );
+  }
+}
+
+/**
  * EvaluateModel을 Python으로 실행합니다 (평가 메트릭 계산)
  * 타임아웃: 60초
  */
