@@ -74,5 +74,13 @@
     "dataFile": "data/jmdc_synthetic/cohort_ready.csv",
     "expectedOutput": "연령표준화 발생률(1000_PY) + has_diabetes 군별 KM 생존곡선·log-rank",
     "modelOrTask": "JMDC 코호트 발생률·생존 비교 (헬스케어)"
+  },
+  "JMDC_Utilization_DemandForecast.json": {
+    "inputData": "Examples_in_Load/jmdc_monthly_utilization.csv (합성 일별 외래 수요, 730행; 실제 환자정보 무포함)",
+    "description": "[JMDC 전용 / 제9부 28.9 이전] 자전거 수요예측의 구조를 헬스케어로 이전 — 일별 외래 방문수 예측. FeatureEngineer(요일·월 순환 인코딩) → RandomForest 회귀 → 잔차 진단. 시간축+주기성+추세+비대칭 비용(자원 부족 위험) 구조 동일. 합성 데이터(결정적, seed 42).",
+    "tags": ["JMDC", "수요예측", "회귀", "랜덤포레스트", "특징공학", "헬스케어", "Elston"],
+    "dataFile": "Examples_in_Load/jmdc_monthly_utilization.csv",
+    "expectedOutput": "R²≈0.9676, RMSE≈43.6, MAE≈33.9 (test n=220)",
+    "modelOrTask": "랜덤 포레스트 회귀 (외래 수요예측, 순환 특징공학)"
   }
 }

@@ -1,0 +1,21 @@
+{
+  "name": "JMDC healthcare daily outpatient-visit demand forecast (FeatureEngineer + RandomForest)",
+  "modules": [
+    { "type": "LoadData", "name": "Load", "parameters": { "source": "jmdc_monthly_utilization.csv" } },
+    { "type": "FeatureEngineer", "name": "FE", "parameters": { "operations": [ { "type": "cyclical", "column": "dow", "period": 7 }, { "type": "cyclical", "column": "month", "period": 12 } ] } },
+    { "type": "SplitData", "name": "Split", "parameters": { "train_size": 0.7, "random_state": 42, "shuffle": "True", "stratify": "False", "stratify_column": null } },
+    { "type": "RandomForest", "name": "RF", "parameters": { "model_purpose": "regression", "n_estimators": 40, "criterion": "mse", "max_depth": 16, "max_features": null } },
+    { "type": "TrainModel", "name": "Train", "parameters": { "feature_columns": ["day_idx","dow_sin","dow_cos","month_sin","month_cos","is_weekend","is_flu_season","temp","enrollees"], "label_column": "visits" } },
+    { "type": "ScoreModel", "name": "Score", "parameters": {} },
+    { "type": "EvaluateModel", "name": "Eval", "parameters": { "model_type": "regression", "label_column": "visits", "prediction_column": "Predict", "threshold": 0.5 } }
+  ],
+  "connections": [
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 1, "toPort": "data_in" },
+    { "fromModuleIndex": 1, "fromPort": "data_out", "toModuleIndex": 2, "toPort": "data_in" },
+    { "fromModuleIndex": 2, "fromPort": "train_data_out", "toModuleIndex": 4, "toPort": "data_in" },
+    { "fromModuleIndex": 3, "fromPort": "model_out", "toModuleIndex": 4, "toPort": "model_in" },
+    { "fromModuleIndex": 4, "fromPort": "trained_model_out", "toModuleIndex": 5, "toPort": "model_in" },
+    { "fromModuleIndex": 2, "fromPort": "test_data_out", "toModuleIndex": 5, "toPort": "data_in" },
+    { "fromModuleIndex": 5, "fromPort": "scored_data_out", "toModuleIndex": 6, "toPort": "data_in" }
+  ]
+}

@@ -1626,6 +1626,170 @@
     }
   },
   {
+    "filename": "JMDC_Utilization_DemandForecast.json",
+    "name": "JMDC 외래 수요예측 데모 (FeatureEngineer + RandomForest)",
+    "inputData": "Examples_in_Load/jmdc_monthly_utilization.csv (합성 일별 외래 수요, 730행; 실제 환자정보 무포함)",
+    "description": "[JMDC 전용 / 제9부 28.9 이전] 자전거 수요예측의 구조를 헬스케어로 이전 — 일별 외래 방문수 예측. FeatureEngineer(요일·월 순환 인코딩) → RandomForest 회귀 → 잔차 진단. 시간축+주기성+추세+비대칭 비용(자원 부족 위험) 구조 동일. 합성 데이터(결정적, seed 42).",
+    "category": "머신러닝",
+    "data": {
+      "name": "JMDC 외래 수요예측 데모 (FeatureEngineer + RandomForest)",
+      "modules": [
+        {
+          "type": "LoadData",
+          "name": "Load",
+          "parameters": {
+            "source": "jmdc_monthly_utilization.csv"
+          },
+          "position": {
+            "x": 40,
+            "y": 40
+          }
+        },
+        {
+          "type": "FeatureEngineer",
+          "name": "FE",
+          "parameters": {
+            "operations": [
+              {
+                "type": "cyclical",
+                "column": "dow",
+                "period": 7
+              },
+              {
+                "type": "cyclical",
+                "column": "month",
+                "period": 12
+              }
+            ]
+          },
+          "position": {
+            "x": 320,
+            "y": 40
+          }
+        },
+        {
+          "type": "SplitData",
+          "name": "Split",
+          "parameters": {
+            "train_size": 0.7,
+            "random_state": 42,
+            "shuffle": "True",
+            "stratify": "False",
+            "stratify_column": null
+          },
+          "position": {
+            "x": 600,
+            "y": 40
+          }
+        },
+        {
+          "type": "RandomForest",
+          "name": "RF",
+          "parameters": {
+            "model_purpose": "regression",
+            "n_estimators": 40,
+            "criterion": "mse",
+            "max_depth": 16,
+            "max_features": null
+          },
+          "position": {
+            "x": 40,
+            "y": 300
+          }
+        },
+        {
+          "type": "TrainModel",
+          "name": "Train",
+          "parameters": {
+            "feature_columns": [
+              "day_idx",
+              "dow_sin",
+              "dow_cos",
+              "month_sin",
+              "month_cos",
+              "is_weekend",
+              "is_flu_season",
+              "temp",
+              "enrollees"
+            ],
+            "label_column": "visits"
+          },
+          "position": {
+            "x": 320,
+            "y": 300
+          }
+        },
+        {
+          "type": "ScoreModel",
+          "name": "Score",
+          "parameters": {},
+          "position": {
+            "x": 600,
+            "y": 300
+          }
+        },
+        {
+          "type": "EvaluateModel",
+          "name": "Eval",
+          "parameters": {
+            "model_type": "regression",
+            "label_column": "visits",
+            "prediction_column": "Predict",
+            "threshold": 0.5
+          },
+          "position": {
+            "x": 880,
+            "y": 300
+          }
+        }
+      ],
+      "connections": [
+        {
+          "fromModuleIndex": 0,
+          "fromPort": "data_out",
+          "toModuleIndex": 1,
+          "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 1,
+          "fromPort": "data_out",
+          "toModuleIndex": 2,
+          "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 2,
+          "fromPort": "train_data_out",
+          "toModuleIndex": 4,
+          "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 3,
+          "fromPort": "model_out",
+          "toModuleIndex": 4,
+          "toPort": "model_in"
+        },
+        {
+          "fromModuleIndex": 4,
+          "fromPort": "trained_model_out",
+          "toModuleIndex": 5,
+          "toPort": "model_in"
+        },
+        {
+          "fromModuleIndex": 2,
+          "fromPort": "test_data_out",
+          "toModuleIndex": 5,
+          "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 5,
+          "fromPort": "scored_data_out",
+          "toModuleIndex": 6,
+          "toPort": "data_in"
+        }
+      ]
+    }
+  },
+  {
     "filename": "JMDC_Cohort_IncidenceSurvival.json",
     "name": "JMDC-합성코호트 발생률·생존비교 데모 (J1→J2→J3→J4)",
     "inputData": "data/jmdc_synthetic/cohort_ready.csv (JMDC 합성 코호트; 모듈 기본은 synthetic 생성기 seed 43)",
