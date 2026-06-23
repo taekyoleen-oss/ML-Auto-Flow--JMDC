@@ -1,0 +1,10 @@
+{
+  "name": "Book_RestaurantRatings_Recommender",
+  "modules": [
+    { "type": "LoadData", "name": "Load", "parameters": { "source": "ratings_small.csv" }, "position": { "x": 50, "y": 80 } },
+    { "type": "Recommender", "name": "Recommender", "parameters": { "user_col": "user_id", "item_col": "item_id", "rating_col": "rating", "n_components": 2, "top_n": 3 }, "position": { "x": 420, "y": 80 } }
+  ],
+  "connections": [
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 1, "toPort": "data_in" }
+  ]
+}

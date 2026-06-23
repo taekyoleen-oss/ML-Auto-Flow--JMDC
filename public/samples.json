@@ -874,7 +874,7 @@
           }
         },
         {
-          "type": "NormalizeData",
+          "type": "ScalingTransform",
           "position": {
             "x": 1314,
             "y": 200
