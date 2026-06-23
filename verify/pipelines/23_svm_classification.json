@@ -1,0 +1,20 @@
+{
+  "name": "sklearn SVM classification chain (iris)",
+  "requires": ["sklearn"],
+  "modules": [
+    { "type": "LoadData", "name": "Load", "parameters": { "source": "iris.csv" } },
+    { "type": "SplitData", "name": "Split", "parameters": { "train_size": 0.7, "random_state": 42, "shuffle": "True", "stratify": "False", "stratify_column": null } },
+    { "type": "SVM", "name": "Model", "parameters": { "model_purpose": "classification", "C": 1.0, "kernel": "rbf", "gamma": "scale" } },
+    { "type": "TrainModel", "name": "Train", "parameters": { "feature_columns": ["sepal_length","sepal_width","petal_length","petal_width"], "label_column": "species" } },
+    { "type": "ScoreModel", "name": "Score", "parameters": {} },
+    { "type": "EvaluateModel", "name": "Eval", "parameters": { "model_type": "classification", "label_column": "species", "prediction_column": "Predict", "threshold": 0.5 } }
+  ],
+  "connections": [
+    { "fromModuleIndex": 0, "fromPort": "data_out", "toModuleIndex": 1, "toPort": "data_in" },
+    { "fromModuleIndex": 1, "fromPort": "train_data_out", "toModuleIndex": 3, "toPort": "data_in" },
+    { "fromModuleIndex": 2, "fromPort": "model_out", "toModuleIndex": 3, "toPort": "model_in" },
+    { "fromModuleIndex": 3, "fromPort": "trained_model_out", "toModuleIndex": 4, "toPort": "model_in" },
+    { "fromModuleIndex": 1, "fromPort": "test_data_out", "toModuleIndex": 4, "toPort": "data_in" },
+    { "fromModuleIndex": 4, "fromPort": "scored_data_out", "toModuleIndex": 5, "toPort": "data_in" }
+  ]
+}

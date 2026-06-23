@@ -836,6 +836,13 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
       outputs: [{ name: "model_out", type: "model" }],
     },
     {
+      type: ModuleType.LDA,
+      status: ModuleStatus.Pending,
+      parameters: { solver: "svd", shrinkage: null },
+      inputs: [],
+      outputs: [{ name: "model_out", type: "model" }],
+    },
+    {
       type: ModuleType.KNN,
       status: ModuleStatus.Pending,
       parameters: {

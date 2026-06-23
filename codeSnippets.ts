@@ -984,6 +984,90 @@ print(f"  Max Iter: {p_max_iter}")
 # model variable contains the model instance ready for training.
 `,
 
+  LogisticRegression: `
+from sklearn.linear_model import LogisticRegression
+
+# This module creates a logistic regression (classification) model instance.
+# The model will be trained in the 'Train Model' module.
+# Parameters from UI
+p_penalty = {penalty}
+p_C = {C}
+p_solver = {solver}
+p_max_iter = {max_iter}
+
+model = LogisticRegression(penalty=p_penalty, C=p_C, solver=p_solver, max_iter=p_max_iter, random_state=42)
+
+print(f"Logistic Regression model instance created (solver={p_solver}, C={p_C}, penalty={p_penalty}).")
+
+# Note: The model is not fitted here. It will be fitted in the 'Train Model' module.
+# model variable contains the model instance ready for training.
+`,
+
+  SVM: `
+from sklearn.svm import SVC, SVR
+
+# This module creates a support vector machine model instance.
+# The model will be trained in the 'Train Model' module.
+# Parameters from UI
+p_model_purpose = {model_purpose}
+p_C = {C}
+p_kernel = {kernel}
+p_gamma = {gamma}
+
+# SVC supports random_state (used only when probability=True, harmless otherwise).
+if p_model_purpose == 'classification':
+    model = SVC(C=p_C, kernel=p_kernel, gamma=p_gamma, random_state=42)
+else:
+    model = SVR(C=p_C, kernel=p_kernel, gamma=p_gamma)
+
+print(f"SVM model instance created ({p_model_purpose}, kernel={p_kernel}, C={p_C}).")
+
+# Note: The model is not fitted here. It will be fitted in the 'Train Model' module.
+# model variable contains the model instance ready for training.
+`,
+
+  LDA: `
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+
+# This module creates a Linear Discriminant Analysis (classification) model instance.
+# The model will be trained in the 'Train Model' module.
+# Parameters from UI
+p_solver = {solver}
+p_shrinkage = {shrinkage} if {shrinkage} else None
+
+# LDA is deterministic (no random_state needed). 'svd' solver requires shrinkage=None.
+model = LinearDiscriminantAnalysis(solver=p_solver, shrinkage=p_shrinkage)
+
+print(f"LDA model instance created (solver={p_solver}).")
+
+# Note: The model is not fitted here. It will be fitted in the 'Train Model' module.
+# model variable contains the model instance ready for training.
+`,
+
+  NaiveBayes: `
+from sklearn.naive_bayes import GaussianNB, MultinomialNB, BernoulliNB
+
+# This module creates a naive Bayes (classification) model instance.
+# The model will be trained in the 'Train Model' module.
+# Parameters from UI
+p_model_type = {model_type}
+p_alpha = {alpha}
+p_fit_prior = {fit_prior} == 'True'
+
+# Naive Bayes is deterministic (no random_state needed).
+if p_model_type == 'MultinomialNB':
+    model = MultinomialNB(alpha=p_alpha, fit_prior=p_fit_prior)
+elif p_model_type == 'BernoulliNB':
+    model = BernoulliNB(alpha=p_alpha, fit_prior=p_fit_prior)
+else:
+    model = GaussianNB()
+
+print(f"Naive Bayes model instance created ({p_model_type}).")
+
+# Note: The model is not fitted here. It will be fitted in the 'Train Model' module.
+# model variable contains the model instance ready for training.
+`,
+
   LogisticTradition: `
 from sklearn.linear_model import LogisticRegression
 
