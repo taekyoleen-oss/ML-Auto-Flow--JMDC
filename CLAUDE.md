@@ -4,7 +4,8 @@
 1. **Python 재현성(★최우선):** **모든 데이터 분석은 오직 검증 가능한 Python으로 수행된다.** 캔버스 모듈은 브라우저 Pyodide로 실행되고, "전체 코드 보기"는 외부에서 그대로 도는 standalone Python을 내보내며, `npm run verify:pipelines`가 외부 Python **2회 실행 byte-identical**로 이를 강제한다. `data_analysis_modules.py` ↔ `codeSnippets.ts` 정합성을 항상 유지한다.
    - **새 분석 모듈 추가 시 반드시 ① `codeSnippets.ts` export 템플릿(결정적, 시드 고정) + ② `verify/pipelines/` 픽스처를 함께 추가**한다. "설정만 출력"하는 인앱 전용 스텁 금지.
    - 2026-06-23 전수 점검·복구 완료(베이스 동기화): RandomForest·분류 4종·통계 3종 export 갭 해소, FeatureEngineer·FeatureImportance·PythonScript 신설. JMDC verify 28/28. (웹 Pyodide 한계는 ML Auto Flow `docs/azure_ml_book/05` 참조.)
-   - **⚠️ 알려진 이슈(수정 승인 대기, 3개 앱 공통):** *인앱* ScoreModel이 선형 근사라 **인앱 트리모델 예측·평가가 부정확**(export·verify는 정확). 권고 수정: 모델 pickle→base64 직렬화 후 인앱 `.predict`. 상세: ML Auto Flow `docs/azure_ml_book/05` §8.
+   - **✅ 해결됨(2026-06-23): 인앱 RandomForest/GradientBoosting 정확도.** RF/GB가 인앱 TrainModel 분기 부재로 `Math.random()` 시뮬레이션 폴백에 빠지던 버그 수정(fit/scoreRandomForestPython·fit/scoreGradientBoostingPython 신설, sklearn.ensemble random_state=42; TrainModel 분기+ScoreModel 재적합 디스패치). 3개 앱 공통, export·verify 불변, 브라우저 Pyodide 검증 완료. 상세: ML Auto Flow `docs/azure_ml_book/05` §8.
+   - **⚠️ 알려진 이슈(별개·미해결):** 인앱 ScoreModel이 호출하는 `scoreSVMPython`·`scoreLDAPython`·`scoreNaiveBayesPython` 정의가 pyodideRunner에 없어 **SVM/LDA/NaiveBayes 인앱 스코어링 크래시**(3앱 공통; DFA는 DecisionTree도). export·verify는 정확. 권고: 재적합 score 함수 추가(가산). 상세: `docs/azure_ml_book/05` §8.
 2. **두 앱 동기화:** `ML Auto Flow`(베이스)와 `ML_Auto_Flow-JMDC`(JMDC 상위집합)의 공통 변경은 양쪽에 동일 적용하고, JMDC 전용만 차이로 남긴다.
 
 ## 하네스: ML Flow (두 앱 수정·강화·테스트)
