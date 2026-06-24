@@ -282,7 +282,7 @@ export const ColumnPlotPreviewModal: React.FC<ColumnPlotPreviewModalProps> = ({
                     )}
 
                     {chartImage && !isGenerating && (
-                        <div className="bg-gray-900 rounded-lg p-4 flex items-center justify-center">
+                        <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-transparent rounded-lg p-4 flex items-center justify-center">
                             <img
                                 src={`data:image/png;base64,${chartImage}`}
                                 alt={`${selectedChart} Plot`}

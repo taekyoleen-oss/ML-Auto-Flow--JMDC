@@ -267,7 +267,7 @@ const SamplesModal: React.FC<SamplesModalProps> = ({
               )}
               <button
                 onClick={handleClose}
-                className="text-gray-400 hover:text-white transition-colors p-1 rounded-md hover:bg-gray-800"
+                className="text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
                 aria-label="Close"
               >
                 <XMarkIcon className="w-6 h-6" />

@@ -75,34 +75,34 @@ export const AIPipelineFromDataModal: React.FC<AIPipelineFromDataModalProps> = (
             className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-40"
             onClick={handleClose}
         >
-            <div 
-                className="bg-gray-800 text-white rounded-lg shadow-xl w-full max-w-2xl"
+            <div
+                className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg shadow-xl w-full max-w-2xl"
                 onClick={e => e.stopPropagation()}
             >
-                <header className="flex items-center justify-between p-4 border-b border-gray-700">
+                <header className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
                     <h2 className="text-xl font-bold flex items-center gap-2">
-                        <SparklesIcon className="w-6 h-6 text-indigo-400" />
+                        <SparklesIcon className="w-6 h-6 text-indigo-500 dark:text-indigo-400" />
                         AI로 데이터 분석 실행하기
                     </h2>
-                    <button onClick={handleClose} className="text-gray-500 hover:text-gray-300">
+                    <button onClick={handleClose} className="text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-300">
                         <XCircleIcon className="w-6 h-6" />
                     </button>
                 </header>
                 <main className="p-6 space-y-4">
                      <div>
-                        <label className="block text-gray-400 mb-2">1. 분석 목표를 설명해주세요.</label>
+                        <label className="block text-gray-600 dark:text-gray-400 mb-2">1. 분석 목표를 설명해주세요.</label>
                         <textarea
                             value={goal}
                             onChange={(e) => setGoal(e.target.value)}
                             placeholder="예: 보험 청구 데이터를 사용하여 사기 여부 분류하기"
-                            className="w-full h-24 p-3 bg-gray-900 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-200"
+                            className="w-full h-24 p-3 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 dark:text-gray-200"
                             autoFocus
                         />
                     </div>
                      <div>
-                        <label className="block text-gray-400 mb-2">2. 분석할 데이터를 업로드해주세요. (CSV)</label>
-                        <div 
-                            className={`flex items-center justify-center w-full p-4 border-2 border-dashed rounded-md cursor-pointer transition-colors ${isDraggingOver ? 'border-indigo-400 bg-gray-700' : 'border-gray-600 hover:border-indigo-500'}`}
+                        <label className="block text-gray-600 dark:text-gray-400 mb-2">2. 분석할 데이터를 업로드해주세요. (CSV)</label>
+                        <div
+                            className={`flex items-center justify-center w-full p-4 border-2 border-dashed rounded-md cursor-pointer transition-colors ${isDraggingOver ? 'border-indigo-400 bg-indigo-50 dark:bg-gray-700' : 'border-gray-300 dark:border-gray-600 hover:border-indigo-500'}`}
                             onClick={() => fileInputRef.current?.click()}
                             onDragOver={handleDragOver}
                             onDragLeave={handleDragLeave}
@@ -110,21 +110,21 @@ export const AIPipelineFromDataModal: React.FC<AIPipelineFromDataModalProps> = (
                         >
                             <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".csv" className="hidden" />
                             {file ? (
-                                <p className="text-green-400">{file.name}</p>
+                                <p className="text-green-600 dark:text-green-400">{file.name}</p>
                             ) : (
-                                <div className="text-center text-gray-500">
+                                <div className="text-center text-gray-500 dark:text-gray-500">
                                     <FolderOpenIcon className="w-8 h-8 mx-auto mb-2" />
                                     <p>파일을 선택하거나 여기에 드래그 앤 드롭하세요.</p>
                                 </div>
                             )}
                         </div>
-                        {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
+                        {error && <p className="text-red-500 dark:text-red-400 text-sm mt-2">{error}</p>}
                     </div>
                 </main>
-                <footer className="flex justify-end p-4 bg-gray-900 rounded-b-lg">
+                <footer className="flex justify-end p-4 bg-gray-50 dark:bg-gray-900 rounded-b-lg">
                     <button
                         onClick={handleClose}
-                        className="px-4 py-2 text-sm font-semibold text-gray-300 bg-gray-700 hover:bg-gray-600 rounded-md mr-2"
+                        className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-md mr-2"
                     >
                         취소
                     </button>

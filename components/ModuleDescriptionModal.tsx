@@ -58,7 +58,15 @@ export const ModuleDescriptionModal: React.FC<ModuleDescriptionModalProps> = ({
             </div>
           ) : (
             <div className="space-y-5 text-sm leading-relaxed">
+              {/* 🔰 초보자용 쉬운 설명 — 가장 먼저, 가장 크게 강조 */}
+              {desc.beginner && (
+                <Section title="쉽게 이해하기" body={desc.beginner} tone="beginner" />
+              )}
               <Section title="역할" body={desc.role} />
+              {/* 📊 분석 방법 — 이 모듈이 어떻게 분석하는지 */}
+              {desc.analysisMethod && (
+                <Section title="분석 방법" body={desc.analysisMethod} tone="method" />
+              )}
               {desc.whenToUse && (
                 <Section title="언제 사용하나요" body={desc.whenToUse} tone="when" />
               )}
@@ -93,12 +101,22 @@ export const ModuleDescriptionModal: React.FC<ModuleDescriptionModalProps> = ({
   );
 };
 
-type Tone = "when" | "link" | "warn";
+type Tone = "when" | "link" | "warn" | "beginner" | "method";
 
 const TONE_STYLES: Record<
   Tone,
   { heading: string; box: string; icon: string }
 > = {
+  beginner: {
+    heading: "text-sky-800 dark:text-sky-300 text-base",
+    box: "bg-sky-50 dark:bg-sky-900/20 border-l-4 border-sky-400 dark:border-sky-600 p-3 rounded-r text-[15px] leading-7",
+    icon: "🔰",
+  },
+  method: {
+    heading: "text-violet-700 dark:text-violet-400",
+    box: "bg-violet-50 dark:bg-violet-900/20 border-l-4 border-violet-400 dark:border-violet-600 p-2.5 rounded-r",
+    icon: "📊",
+  },
   when: {
     heading: "text-emerald-700 dark:text-emerald-400",
     box: "bg-emerald-50 dark:bg-emerald-900/20 border-l-4 border-emerald-400 dark:border-emerald-600 p-2.5 rounded-r",

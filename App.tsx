@@ -132,7 +132,7 @@ import { AdvancedUnlockModal } from "./components/AdvancedUnlockModal";
 import { useAdvancedFeature, ADVANCED_BTN_DIM, AdvancedLockBadge } from "./contexts/AdvancedFeatureContext";
 import { savePipeline, loadPipeline } from "./utils/fileOperations";
 import { setPyodideStatusCallback } from "./utils/pyodideRunner";
-import { bindDatasetsToModules, contentSizeMB, EMBED_SIZE_LIMIT_MB, uploadDatasetToWeb } from "./utils/datasetRegistry";
+import { bindDatasetsToModules, contentSizeMB, EMBED_SIZE_LIMIT_MB, resolveDatasetContent, uploadDatasetToWeb } from "./utils/datasetRegistry";
 import { SaveModelOptionsModal, type LoaderDataInfo, type SaveDecisions } from "./components/SaveModelOptionsModal";
 import { classifyPythonError, validateModuleParameters, validateModuleConnections } from "./utils/pipelineValidation";
 import { autoLayoutModules } from "./utils/autoLayout";
@@ -4132,7 +4132,30 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
 
       try {
         if (module.type === ModuleType.LoadData) {
-          const fileContent = module.parameters.fileContent as string;
+          let fileContent = module.parameters.fileContent as string;
+          // 데이터 본문이 없으면 데이터셋 레지스트리에서 파일명(source)으로 해석 시도.
+          // 캐시 → 번들 public/examples-in-load.json → Supabase 'datasets' 웹 폴백 순.
+          // 샘플/참조 저장 모델이 어떤 경로로 로드됐든 실행 시 데이터를 자동 확보한다.
+          if (!fileContent) {
+            const src = String(module.parameters.source || "").trim();
+            if (src) {
+              addLog(
+                "INFO",
+                `데이터 본문이 없어 '${src}'를 데이터셋(예제/웹)에서 불러옵니다…`
+              );
+              const resolved = await resolveDatasetContent(src);
+              if (resolved) {
+                fileContent = resolved;
+                const isExcel = /\.xlsx?$/i.test(src);
+                updateModuleParameters(module.id, {
+                  fileContent: resolved,
+                  fileType: isExcel ? "excel" : "csv",
+                  sourceType: "file",
+                });
+                addLog("SUCCESS", `'${src}' 데이터를 불러왔습니다.`);
+              }
+            }
+          }
           if (!fileContent)
             throw new Error(
               "No file content loaded. Please select a CSV file."
@@ -11271,6 +11294,12 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
           e.preventDefault();
           redo();
         } else if (e.key === "c") {
+          // 텍스트가 선택돼 있으면 브라우저 기본 복사(Ctrl+C)를 허용한다.
+          // (코드 패널·터미널 로그·미리보기 등의 텍스트를 별도 복사 버튼 없이 그대로 복사)
+          const textSel = window.getSelection();
+          if (textSel && textSel.toString().trim()) {
+            return; // 기본 동작: 선택 텍스트 복사 (모듈 복사로 가로채지 않음)
+          }
           if (selectedModuleIds.length > 0) {
             e.preventDefault();
             pasteOffset.current = 0;
@@ -11331,7 +11360,11 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
             );
           }
         } else if (e.key === "x") {
-          // Cut (copy and delete)
+          // Cut (copy and delete) — 텍스트 선택 중이면 기본 동작 허용(모듈 잘라내기 방지)
+          const textSelX = window.getSelection();
+          if (textSelX && textSelX.toString().trim()) {
+            return;
+          }
           if (selectedModuleIds.length > 0) {
             e.preventDefault();
             pasteOffset.current = 0;

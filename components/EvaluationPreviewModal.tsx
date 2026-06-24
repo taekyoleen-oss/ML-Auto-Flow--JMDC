@@ -69,7 +69,7 @@ const MetricBarChart: React.FC<{ metrics: Record<string, number | string>; model
                                 />
                             </div>
                             {isUnit && (
-                                <div className="flex justify-between text-xs text-gray-300 mt-0.5">
+                                <div className="flex justify-between text-xs text-gray-400 mt-0.5">
                                     <span>0</span>
                                     <span>0.5</span>
                                     <span>1.0</span>

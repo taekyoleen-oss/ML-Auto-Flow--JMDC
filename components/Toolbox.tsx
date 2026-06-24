@@ -440,7 +440,7 @@ export const Toolbox: React.FC<ToolboxProps> = ({
                       <div key={subCategoryKey} className="pl-2">
                         <button
                           onClick={() => toggleCategory(subCategoryKey)}
-                          className="w-full flex items-center justify-between py-1 rounded-md text-left text-xs font-semibold text-gray-400 hover:bg-gray-800 transition-colors"
+                          className="w-full flex items-center justify-between py-1 rounded-md text-left text-xs font-semibold text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                         >
                           <span>{subCategory.name}</span>
                           {expandedCategories[subCategoryKey] ? (
