@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useState } from 'react';
 import { CanvasModule, ModuleStatus } from '../types';
 
 interface Props {
@@ -25,6 +25,27 @@ function statusColor(status: string): string {
 
 export const CanvasMinimap: React.FC<Props> = ({ modules, pan, scale, containerWidth, containerHeight, onPanTo }) => {
   const ref = useRef<SVGSVGElement>(null);
+
+  // 미니맵 위치 이동 — 기본 우하단(bottom-4 right-4)에서 드래그 핸들로 자유 이동.
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const dragRef = useRef<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
+  const onHandleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragRef.current = { sx: e.clientX, sy: e.clientY, ox: offset.x, oy: offset.y };
+    const onMove = (ev: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      setOffset({ x: d.ox + (ev.clientX - d.sx), y: d.oy + (ev.clientY - d.sy) });
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [offset]);
 
   const xs = modules.length > 0 ? modules.map(m => m.position.x) : [0];
   const ys = modules.length > 0 ? modules.map(m => m.position.y) : [0];
@@ -68,7 +89,20 @@ export const CanvasMinimap: React.FC<Props> = ({ modules, pan, scale, containerW
   const vpMH = Math.min(MINIMAP_H - vpMY, vpH * ms);
 
   return (
-    <div className="absolute bottom-4 right-4 z-30 rounded-lg overflow-hidden shadow-lg border border-gray-600 bg-gray-900/85 backdrop-blur-sm" style={{ width: MINIMAP_W, height: MINIMAP_H }}>
+    <div
+      className="absolute bottom-4 right-4 z-30 rounded-lg overflow-hidden shadow-lg border border-gray-600 bg-gray-900/85 backdrop-blur-sm"
+      style={{ width: MINIMAP_W, transform: `translate(${offset.x}px, ${offset.y}px)` }}
+    >
+      {/* 드래그 핸들 — 잡고 끌어 미니맵을 이동. 더블클릭하면 원위치로 복귀. */}
+      <div
+        onMouseDown={onHandleMouseDown}
+        onDoubleClick={() => setOffset({ x: 0, y: 0 })}
+        className="cursor-move select-none flex items-center gap-1 px-2 py-1 bg-gray-800/90 text-gray-300 text-[10px] font-medium border-b border-gray-700"
+        title="드래그하여 이동 · 더블클릭하면 원위치"
+      >
+        <span aria-hidden>⠿</span>
+        <span>전체 보기</span>
+      </div>
       <svg
         ref={ref}
         width={MINIMAP_W}

@@ -5590,6 +5590,7 @@ import json
 import pandas as pd
 import numpy as np
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, mean_squared_error, mean_absolute_error, r2_score, confusion_matrix, roc_auc_score, average_precision_score
+from sklearn.preprocessing import LabelEncoder
 
 # 데이터 준비
 df = pd.DataFrame(js_data.to_py())
@@ -5605,10 +5606,24 @@ y_true = df[label_column].values
 metrics = {}
 threshold_metrics_list = []
 
-if model_type == 'classification':
+# 분류 여부: model_type이 classification이거나, 라벨이 비수치(문자열 클래스)면 분류로 처리
+# (회귀 분기는 float 변환이 필요하므로 문자열 라벨이 잘못 들어오면 분류로 안전 처리)
+_true_is_numeric = np.issubdtype(np.asarray(y_true).dtype, np.number)
+is_classification = (model_type == 'classification') or (not _true_is_numeric)
+
+if is_classification:
     # 분류 모델: prediction_column이 확률값인지 예측값인지 확인
     y_pred_raw = df[prediction_column].values
-    
+
+    # 문자열/범주형 클래스(라벨 또는 예측)는 정수 코드로 통일(결정적 LabelEncoder).
+    # 예: Adult income '>50K'/'<=50K' 같은 문자열 분류 라벨 지원(이전엔 astype(int)/비교에서 타입 오류).
+    _pred_is_numeric = np.issubdtype(np.asarray(y_pred_raw).dtype, np.number)
+    if not (_true_is_numeric and _pred_is_numeric):
+        _le = LabelEncoder()
+        _le.fit(np.concatenate([np.asarray(y_true).astype(str), np.asarray(y_pred_raw).astype(str)]))
+        y_true = _le.transform(np.asarray(y_true).astype(str))
+        y_pred_raw = _le.transform(np.asarray(y_pred_raw).astype(str))
+
     # 예측값이 확률 범위(0~1)에 있는지 확인
     is_probability = np.all((y_pred_raw >= 0) & (y_pred_raw <= 1)) and np.any((y_pred_raw > 0) & (y_pred_raw < 1))
     

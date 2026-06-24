@@ -6277,6 +6277,12 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
             throw new Error("No feature columns specified.");
           }
 
+          // 분류 모델은 범주형(문자열) 라벨을 정수 코드로 인코딩한다.
+          // (이전 버그: 라벨이 숫자가 아니면 모든 행을 버려 'No valid data rows' 발생 —
+          //  Adult Income의 income(>50K/<=50K) 같은 문자열 라벨에서 분류 학습 불가했음.)
+          const labelClassMap: Record<string, number> = {};
+          let nextLabelCode = 0;
+
           for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
             const row = rows[rowIdx];
             if (!row) {
@@ -6319,14 +6325,31 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
             }
 
             const labelValue = row[label_column];
-            if (
-              typeof labelValue === "number" &&
-              !isNaN(labelValue) &&
-              labelValue !== null &&
-              labelValue !== undefined
-            ) {
-              X.push(featureRow);
-              y.push(labelValue);
+            if (modelIsClassification) {
+              // 분류: 비어있지 않은 라벨이면 클래스 코드로 인코딩(문자열/숫자/불리언 허용).
+              if (
+                labelValue !== null &&
+                labelValue !== undefined &&
+                String(labelValue).trim() !== ""
+              ) {
+                const key = String(labelValue);
+                if (!(key in labelClassMap)) labelClassMap[key] = nextLabelCode++;
+                X.push(featureRow);
+                y.push(labelClassMap[key]);
+              }
+            } else {
+              // 회귀: 숫자 라벨만(숫자 형태의 문자열도 허용).
+              const num =
+                typeof labelValue === "number" ? labelValue : Number(labelValue);
+              if (
+                labelValue !== null &&
+                labelValue !== undefined &&
+                String(labelValue).trim() !== "" &&
+                !isNaN(num)
+              ) {
+                X.push(featureRow);
+                y.push(num);
+              }
             }
           }
 
@@ -10504,7 +10527,11 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
               "Input data not available or is of the wrong type."
             );
 
-          const { feature_columns = [] } = module.parameters;
+          // 모듈을 미리 선택(PropertiesPanel 초기화)하지 않아도 바로 실행되도록,
+          // feature_columns가 비어 있으면 즉시 수치형 컬럼으로 기본값을 채운다.
+          // (이전 버그: module.parameters만 갱신하고 아래 필터에서 쓰는 지역 변수는
+          //  빈 배열 그대로라 'No valid feature columns' 오류가 났음.)
+          let { feature_columns = [] } = module.parameters;
           if (!feature_columns || feature_columns.length === 0) {
             // 기본값: 모든 숫자형 컬럼 사용
             const numericColumns = inputData.columns
@@ -10515,6 +10542,7 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
             if (numericColumns.length === 0) {
               throw new Error("No numeric columns found in the data.");
             }
+            feature_columns = numericColumns;
             module.parameters.feature_columns = numericColumns;
           }
 
