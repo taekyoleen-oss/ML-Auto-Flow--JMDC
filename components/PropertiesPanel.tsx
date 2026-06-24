@@ -863,6 +863,20 @@ const renderParameters = (
               </div>
             )}
           </div>
+          {/* 데이터 설명(위치/출처) — 데이터 포함 여부와 무관하게 작성/표시.
+              참조(웹 예제·외부 위치)로 저장할 때 데이터 출처를 남겨두는 용도. */}
+          <div className="mt-2">
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+              데이터 설명 (위치·출처)
+            </label>
+            <textarea
+              value={module.parameters.dataDescription || ""}
+              onChange={(e) => onParamChange("dataDescription", e.target.value)}
+              rows={2}
+              placeholder="예: 사내 공유드라이브 /data/sales.csv 또는 https://… (출처·위치 메모)"
+              className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 text-xs text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+            />
+          </div>
           {/* 파일 타입 표시 */}
           {module.parameters.fileType === "excel" &&
             module.parameters.sheetName && (
