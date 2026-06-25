@@ -10910,6 +10910,95 @@ js_result = json.dumps(results)
 }
 
 /**
+ * 클러스터링 결과 시각화를 위해 피처 행렬 X를 2D로 투영합니다.
+ * - 피처 3개 이상: PCA(n_components=2, random_state=42)로 차원 축소
+ * - 피처 2개: 두 피처를 그대로 X/Y축으로 사용
+ * - 피처 1개: X축=피처, Y축=0 (1D)
+ * 인앱 표시 전용 — 내보낸 Python/verify와 무관. 결정적(random_state 고정).
+ * 행 순서를 보존하므로 호출 측의 클러스터 라벨과 1:1 정렬됩니다.
+ */
+export async function computeCluster2DProjectionPython(
+  X: number[][],
+  featureNames: string[],
+  timeoutMs: number = 60000
+): Promise<{
+  coords: number[][];
+  xLabel: string;
+  yLabel: string;
+  explainedVariance: number[];
+}> {
+  try {
+    const py = await loadPyodide();
+    const dataJson = JSON.stringify(X);
+    const featureNamesJson = JSON.stringify(featureNames);
+
+    const code = `
+import json
+import numpy as np
+from sklearn.decomposition import PCA
+
+js_data = json.loads('${dataJson.replace(/'/g, "\\'")}')
+js_features = json.loads('${featureNamesJson.replace(/'/g, "\\'")}')
+
+X = np.array(js_data, dtype=float)
+if X.ndim == 1:
+    X = X.reshape(-1, 1)
+# 비유한값을 0으로 치환(행 보존 → 라벨 정렬 유지)
+X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+
+n_features = X.shape[1] if X.ndim == 2 else 0
+explained = []
+
+if n_features >= 3:
+    pca = PCA(n_components=2, random_state=42)
+    coords = pca.fit_transform(X)
+    ev = pca.explained_variance_ratio_.tolist()
+    explained = ev[:2]
+    x_label = f"PC1 ({ev[0] * 100:.1f}%)" if len(ev) > 0 else "PC1"
+    y_label = f"PC2 ({ev[1] * 100:.1f}%)" if len(ev) > 1 else "PC2"
+elif n_features == 2:
+    coords = X[:, :2]
+    x_label = js_features[0] if len(js_features) > 0 else "x"
+    y_label = js_features[1] if len(js_features) > 1 else "y"
+elif n_features == 1:
+    coords = np.column_stack([X[:, 0], np.zeros(X.shape[0])])
+    x_label = js_features[0] if len(js_features) > 0 else "x"
+    y_label = ""
+else:
+    coords = np.zeros((0, 2))
+    x_label = "x"
+    y_label = "y"
+
+results = {
+    'coords': coords.tolist(),
+    'x_label': x_label,
+    'y_label': y_label,
+    'explained_variance': explained,
+}
+
+js_result = json.dumps(results)
+`;
+
+    const resultJson = await withTimeout(
+      py.runPython(code + "\njs_result"),
+      timeoutMs,
+      `클러스터 투영 타임아웃 (${timeoutMs / 1000}초 초과)`
+    );
+
+    const result = JSON.parse(resultJson);
+    return {
+      coords: result.coords,
+      xLabel: result.x_label,
+      yLabel: result.y_label,
+      explainedVariance: result.explained_variance,
+    };
+  } catch (error: any) {
+    const errorMessage = error.message || String(error);
+    throw new Error(`Python 클러스터 투영 오류: ${errorMessage}`);
+  }
+}
+
+/**
  * DBSCAN / Agglomerative(계층적) 등 transductive 클러스터링을 학습합니다.
  * 이들은 별도 .predict가 없어 .fit_predict로 라벨을 한 번에 계산하고 labels_를 반환합니다.
  * (ClusteringData는 학습에 쓰인 동일 데이터에 이 라벨을 그대로 부여한다.)

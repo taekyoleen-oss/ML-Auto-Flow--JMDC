@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { CanvasModule, ClusteringDataOutput, TrainedClusteringModelOutput, DataPreview, Connection, ModuleType } from '../types';
 import { XCircleIcon } from './icons';
+import { ClusterScatterPlot, useCluster2DProjection, pickNumericFeatures } from './ClusterScatterPlot';
 
 interface ClusteringDataPreviewModalProps {
     module: CanvasModule;
@@ -319,6 +320,35 @@ const KMeansClusteringView: React.FC<{
         return dbIndex / centroids.length;
     }, [originalData, clusteredData, centroids, featureColumns]);
 
+    // 산점도용 수치형 피처 (cluster 제외). 값 기반 판정으로 type 오추론에도 견고.
+    const scatterFeatures = useMemo(() => {
+        const base = featureColumns.length > 0
+            ? featureColumns
+            : clusteredData.columns.map(c => c.name);
+        return pickNumericFeatures(clusteredData.rows, base);
+    }, [featureColumns, clusteredData]);
+
+    const clusterLabels = useMemo(
+        () => clusteredData.rows.map(row => {
+            const v = row['cluster'];
+            return typeof v === 'number' ? v : parseInt(String(v), 10) || 0;
+        }),
+        [clusteredData]
+    );
+
+    // centroid가 없는 transductive(DBSCAN/계층형) 결과를 위한 고유 클러스터 수
+    const distinctClusterCount = useMemo(() => {
+        const s = new Set<number>();
+        clusterLabels.forEach(v => s.add(v));
+        return s.size;
+    }, [clusterLabels]);
+
+    const { projection, loading: projLoading, error: projError } = useCluster2DProjection(
+        clusteredData.rows,
+        scatterFeatures,
+        clusterLabels
+    );
+
     return (
         <div className="space-y-6">
             {/* 적합 수준 통계량 */}
@@ -361,7 +391,7 @@ const KMeansClusteringView: React.FC<{
                     <div className="bg-white rounded-lg p-3 border border-gray-200">
                         <div className="text-xs text-gray-600 mb-1">클러스터 수</div>
                         <div className="text-xl font-mono font-semibold text-gray-800">
-                            {centroids.length}
+                            {centroids.length > 0 ? centroids.length : distinctClusterCount}
                         </div>
                         <div className="text-xs text-gray-500 mt-1">총 {clusteredData.rows.length.toLocaleString()}개 포인트</div>
                     </div>
@@ -370,6 +400,32 @@ const KMeansClusteringView: React.FC<{
 
             {/* 클러스터 분포 */}
             <ClusterDistribution clusteredData={clusteredData} />
+
+            {/* 클러스터 산점도 (2D 투영) */}
+            <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">클러스터 산점도 (PCA 2D 투영)</h3>
+                {projLoading && (
+                    <div className="text-sm text-gray-500 p-4 border border-gray-200 rounded-lg bg-white">
+                        2D 투영 계산 중...
+                    </div>
+                )}
+                {!projLoading && projError && (
+                    <div className="text-sm text-red-500 p-4 border border-gray-200 rounded-lg bg-white">
+                        산점도를 생성하지 못했습니다: {projError}
+                    </div>
+                )}
+                {!projLoading && !projError && projection && (
+                    <ClusterScatterPlot
+                        points={projection.points}
+                        labels={projection.labels ?? undefined}
+                        xLabel={projection.xLabel}
+                        yLabel={projection.yLabel}
+                        title={scatterFeatures.length >= 3
+                            ? '클러스터 산점도 (PCA로 2D 축소, 색=클러스터)'
+                            : '클러스터 산점도 (색=클러스터)'}
+                    />
+                )}
+            </div>
 
             {/* 클러스터별 통계량 */}
             {clusterStats.length > 0 && originalData && (
@@ -971,7 +1027,12 @@ export const ClusteringDataPreviewModal: React.FC<ClusteringDataPreviewModalProp
                     <div>
                         <h2 className="text-xl font-bold text-gray-800">Clustering Data: {module.name}</h2>
                         <p className="text-sm text-gray-500 mt-1">
-                            모델 타입: {output.modelType === ModuleType.KMeans ? 'K-Means' : 'PCA'}
+                            모델 타입: {
+                                output.modelType === ModuleType.KMeans ? 'K-Means'
+                                : output.modelType === ModuleType.DBSCAN ? 'DBSCAN'
+                                : output.modelType === ModuleType.HierarchicalClustering ? '계층적 클러스터링'
+                                : 'PCA'
+                            }
                         </p>
                     </div>
                     <button
@@ -984,14 +1045,15 @@ export const ClusteringDataPreviewModal: React.FC<ClusteringDataPreviewModalProp
 
                 {/* 내용 */}
                 <div className="flex-grow overflow-y-auto p-6">
-                    {output.modelType === ModuleType.KMeans ? (
-                        <KMeansClusteringView
+                    {output.modelType === ModuleType.PrincipalComponentAnalysis ? (
+                        <PCAClusteringView
                             output={output}
                             trainedModel={trainedModel}
                             originalData={originalData}
                         />
                     ) : (
-                        <PCAClusteringView
+                        // KMeans · DBSCAN · 계층형(transductive) 모두 클러스터 할당 뷰 사용
+                        <KMeansClusteringView
                             output={output}
                             trainedModel={trainedModel}
                             originalData={originalData}

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { CanvasModule, TrainedClusteringModelOutput, DataPreview, Connection, ModuleType } from '../types';
 import { XCircleIcon, SparklesIcon } from './icons';
+import { ClusterScatterPlot, useCluster2DProjection, pickNumericFeatures } from './ClusterScatterPlot';
 
 interface TrainedClusteringModelPreviewModalProps {
     module: CanvasModule;
@@ -143,6 +144,21 @@ const KMeansResults: React.FC<{
         return counts;
     }, [clusterAssignments, centroids.length]);
 
+    // 클러스터 산점도(2D 투영)용 — 학습 데이터를 중심점 기준 할당 클러스터로 색 구분.
+    // 값 기반 수치 판정(type 오추론에도 견고). featureColumns가 비면 학습데이터 컬럼에서 유추.
+    const scatterFeatures = useMemo(() => {
+        const base = featureColumns.length > 0
+            ? featureColumns
+            : (trainingData?.columns.map(c => c.name) ?? []);
+        return pickNumericFeatures(trainingData?.rows, base);
+    }, [featureColumns, trainingData]);
+
+    const { projection, loading: projLoading, error: projError } = useCluster2DProjection(
+        trainingData?.rows,
+        scatterFeatures,
+        clusterAssignments.length > 0 ? clusterAssignments : null
+    );
+
     return (
         <div className="space-y-6">
             {/* 클러스터 중심점 정보 */}
@@ -200,6 +216,32 @@ const KMeansResults: React.FC<{
                         </div>
                     </div>
                 </div>
+            </div>
+
+            {/* 클러스터 산점도 (2D 투영) */}
+            <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">클러스터 산점도 (PCA 2D 투영)</h3>
+                {projLoading && (
+                    <div className="text-sm text-gray-500 p-4 border border-gray-200 rounded-lg bg-white">
+                        2D 투영 계산 중...
+                    </div>
+                )}
+                {!projLoading && projError && (
+                    <div className="text-sm text-red-500 p-4 border border-gray-200 rounded-lg bg-white">
+                        산점도를 생성하지 못했습니다: {projError}
+                    </div>
+                )}
+                {!projLoading && !projError && projection && (
+                    <ClusterScatterPlot
+                        points={projection.points}
+                        labels={projection.labels ?? undefined}
+                        xLabel={projection.xLabel}
+                        yLabel={projection.yLabel}
+                        title={featureColumns.length >= 3
+                            ? '클러스터 산점도 (PCA로 2D 축소, 색=할당 클러스터)'
+                            : '클러스터 산점도 (색=할당 클러스터)'}
+                    />
+                )}
             </div>
 
             {/* 클러스터별 통계량 */}
