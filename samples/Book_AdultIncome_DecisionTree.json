@@ -97,6 +97,125 @@
       "position": {
         "x": 1060,
         "y": 580
+      },
+      "outputData": {
+        "type": "ModelReportOutput",
+        "html": "<!DOCTYPE html>\n<html lang=\"ko\">\n<head>\n<meta charset=\"UTF-8\" />\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n<title>Adult 소득 분류 모델 분석보고서</title>\n<style>\n  :root { --ink:#1e293b; --muted:#64748b; --line:#e2e8f0; --accent:#0891b2;\n    --accent-soft:#ecfeff; --th:#f8fafc; --good:#16a34a; --warn:#d97706; --bad:#dc2626; --code-bg:#f1f5f9; }\n  * { box-sizing: border-box; }\n  body { margin:0; background:#f1f5f9; color:var(--ink); line-height:1.65; font-size:15px;\n    font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"Noto Sans KR\",Roboto,sans-serif; }\n  .report { max-width:880px; margin:32px auto; background:#fff; border:1px solid var(--line);\n    border-radius:12px; padding:56px 64px; box-shadow:0 1px 3px rgba(15,23,42,.06); }\n  .cover { border-bottom:2px solid var(--ink); padding-bottom:22px; margin-bottom:32px; }\n  .cover h1 { font-size:30px; line-height:1.25; margin:0 0 10px; letter-spacing:-.01em; }\n  .cover .sub { color:var(--muted); font-size:15px; margin:0; }\n  .cover .meta { color:var(--muted); font-size:13px; margin-top:14px; }\n  .badge { display:inline-block; font-size:12px; font-weight:600; padding:2px 9px; border-radius:999px;\n    background:var(--accent-soft); color:var(--accent); }\n  h2 { font-size:21px; margin:38px 0 14px; padding-left:12px; border-left:4px solid var(--accent); }\n  h3 { font-size:16px; margin:24px 0 8px; color:#334155; }\n  ul { margin:10px 0; padding-left:22px; } li { margin:5px 0; }\n  code { font-family:\"JetBrains Mono\",\"Consolas\",\"D2Coding\",monospace; background:var(--code-bg);\n    padding:1px 6px; border-radius:4px; font-size:.88em; }\n  table { border-collapse:collapse; width:100%; margin:14px 0; font-size:14px; }\n  th,td { border:1px solid var(--line); padding:8px 11px; text-align:left; vertical-align:top; }\n  thead th { background:var(--th); font-weight:600; color:#334155; }\n  td.num,th.num { text-align:right; font-variant-numeric:tabular-nums; }\n  tbody tr:nth-child(even){ background:#fcfdfe; }\n  .callout { border:1px solid var(--line); border-left:4px solid var(--accent); background:var(--accent-soft);\n    border-radius:8px; padding:12px 16px; margin:16px 0; }\n  .callout.warn { border-left-color:var(--warn); background:#fffbeb; }\n  .callout .label { font-weight:700; color:#155e75; } .callout.warn .label { color:#92400e; }\n  pre { background:#0f172a; color:#e2e8f0; border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:13px; line-height:1.5; }\n  pre code { background:none; color:inherit; padding:0; }\n  .src { color:var(--muted); font-size:12.5px; font-style:italic; margin-top:6px; }\n  .kpi-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:16px 0; }\n  .kpi { border:1px solid var(--line); border-radius:8px; padding:12px 14px; }\n  .kpi .k { font-size:12px; color:var(--muted); } .kpi .v { font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; }\n  footer { margin-top:40px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:12.5px; }\n  @media print { body{background:#fff;} .report{border:none;box-shadow:none;margin:0;max-width:none;padding:0;} }\n</style>\n</head>\n<body>\n<article class=\"report\">\n  <header class=\"cover\">\n    <div class=\"badge\">모델 분석보고서</div>\n    <h1>Adult 소득 분류 모델 분석보고서</h1>\n    <p class=\"sub\">adult 데이터셋 · 모델 개발 과정 문서화</p>\n    <p class=\"meta\">생성: 2026-06-26 · 작성: ML Auto Flow · 모델 유형: Decision Tree(의사결정나무)</p>\n  </header>\n\n  <div class=\"callout\"><span class=\"label\">목적</span> — 본 문서는 이 파이프라인의 <b>① 데이터셋 구조</b>와 <b>② 모델 개발 과정·결과</b>를 자동 수집된 메타데이터로 정리한 것입니다. 모든 수치는 동일 파이프라인 실행 결과에서 가져왔습니다(창작 없음). API 키 미설정 또는 AI 생성 실패 시 제공되는 <b>결정적 폴백 보고서</b>입니다.</div>\n\n  <h2>1. 요약</h2>\n  <ul>\n    <li><b>모델 유형:</b> Decision Tree(의사결정나무)</li>\n    <li><b>데이터:</b> adult (32,561행 × 15열)</li>\n    <li><b>타깃 변수:</b> <code>income</code></li>\n    <li><b>모델:</b> Decision Tree(의사결정나무)</li>\n    <li><b>데이터 분할:</b> <code>train_size=0.8000</code>, <code>random_state=42</code>, <code>shuffle=True</code>, <code>stratify=False</code></li>\n  </ul>\n  <div class=\"kpi-grid\"><div class=\"kpi\"><div class=\"k\">지표</div><div class=\"v\">(자료 없음)</div></div></div>\n\n  <h2>2. 데이터셋 개요</h2>\n  <table><tbody>\n    <tr><th>데이터셋 이름</th><td>adult</td></tr>\n    <tr><th>파일/출처</th><td><code>adult.csv</code></td></tr>\n    <tr><th>행 수</th><td>32,561</td></tr>\n    <tr><th>열 수</th><td>15</td></tr>\n    <tr><th>모델 유형</th><td>Decision Tree(의사결정나무)</td></tr>\n    <tr><th>타깃 변수</th><td><code>income</code></td></tr>\n  </tbody></table>\n  \n  <p class=\"src\">출처: adult.csv</p>\n\n  <h2>3. 변수(컬럼) 사전</h2>\n  <table><thead><tr><th class=\"num\">#</th><th>컬럼명</th><th>유형</th><th>예시값</th><th>사용 여부</th></tr></thead><tbody><tr><td class=\"num\">1</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">2</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">3</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">4</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">5</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">6</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">7</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">8</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">9</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">10</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">11</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">12</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">13</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">14</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">15</td><td><code></code></td><td></td><td></td><td>미사용</td></tr></tbody></table>\n  <div class=\"callout warn\"><span class=\"label\">사용/미사용 특성</span> — 학습에 사용된 특성 6개: <code>age</code>, <code>fnlwgt</code>, <code>education-num</code>, <code>capital-gain</code>, <code>capital-loss</code>, <code>hours-per-week</code>. 전체 15개 컬럼 중 나머지는 미사용(타깃·인코딩 미적용 등).</div>\n\n  <h2>4. 타깃/클래스 분포</h2>\n  <p>타깃 분포 정보가 메타데이터에 없습니다. (자료 없음)</p>\n\n  <h2>5. 모델 개발 과정 (파이프라인)</h2>\n  <pre><code>[1] LoadData (Load)  →  [2] DecisionTree (Tree)  →  [3] SplitData (Split)  →  [4] TrainModel (Train)  →  [5] ScoreModel (Score)  →  [6] EvaluateModel (Eval)</code></pre>\n  <h3>Load <span style=\"color:#64748b;font-weight:400;\">(LoadData)</span></h3><ul><li>주요 파라미터: <code>source=adult.csv</code></li></ul>\n<h3>Tree <span style=\"color:#64748b;font-weight:400;\">(DecisionTree)</span></h3><ul><li>주요 파라미터: <code>model_purpose=classification</code>, <code>criterion=gini</code>, <code>max_depth=8</code>, <code>min_samples_split=2</code>, <code>min_samples_leaf=1</code></li></ul>\n<h3>Split <span style=\"color:#64748b;font-weight:400;\">(SplitData)</span></h3><ul><li>주요 파라미터: <code>train_size=0.8</code>, <code>random_state=42</code>, <code>shuffle=True</code>, <code>stratify=False</code></li></ul>\n<h3>Train <span style=\"color:#64748b;font-weight:400;\">(TrainModel)</span></h3><ul><li>주요 파라미터: <code>feature_columns=age, fnlwgt, education-num, capital-gain, capital-loss, hours-per-week</code>, <code>label_column=income</code></li></ul>\n<h3>Score <span style=\"color:#64748b;font-weight:400;\">(ScoreModel)</span></h3><ul><li>주요 파라미터: (자료 없음)</li></ul>\n<h3>Eval <span style=\"color:#64748b;font-weight:400;\">(EvaluateModel)</span></h3><ul><li>주요 파라미터: <code>model_type=classification</code>, <code>label_column=income</code>, <code>prediction_column=Predict</code>, <code>threshold=0.5</code></li></ul>\n\n  <h2>6. 분석 결과와 해석</h2>\n  <p>평가 결과 메타데이터가 없습니다. (자료 없음)</p>\n\n  <h2>7. 재현성</h2>\n  <ul>\n    <li>캔버스 모듈은 브라우저 Python(Pyodide)으로 실행되고, \"전체 코드 보기\"는 외부에서 그대로 실행되는 standalone Python을 내보냅니다.</li>\n    <li>난수는 분할/모델 시드(<code>random_state</code>)로 고정되어 동일 결과가 재현됩니다.</li>\n    <li>본 보고서가 인용한 수치는 위 파이프라인의 결정적 실행 결과에서 직접 수집되었습니다.</li>\n  </ul>\n\n  <h2>8. 결론 및 한계</h2>\n  <ul>\n    <li>본 보고서는 자동 수집 메타데이터 기반으로 작성되었습니다. 메타데이터에 없는 항목은 \"(자료 없음)\"으로 표기됩니다.</li>\n    <li>전체 컬럼 중 일부만 특성으로 사용했습니다. 미사용 변수 인코딩·추가로 성능 개선 여지가 있습니다.</li>\n    <li>더 풍부한 해설(도메인 배경·개선 제안)은 상단 설정에서 Claude API 키를 입력하면 AI 생성 보고서로 보강됩니다.</li>\n  </ul>\n  <h2>추가 정보 (사용자 제공)</h2><div class=\"callout\">데이터: UCI Adult(Census Income), 이진 분류(income &gt;50K 여부). 모델: 의사결정나무(criterion=gini, max_depth=8), 수치형 6개 특성(age·fnlwgt·education-num·capital-gain·capital-loss·hours-per-week). 파이프라인 끝 EvaluateModel 출력을 report_in_eval에 연결하면 개발 과정·지표·해석을 HTML 보고서로 생성한다(고급 사용자 실행, 키 없으면 결정적 폴백).</div>\n\n  <footer>본 보고서는 ML Auto Flow의 실제 파이프라인 메타데이터를 기반으로 자동 생성되었습니다. · 모듈: <b>모델 분석보고서</b> · 생성 도구: ML Auto Flow (결정적 폴백)</footer>\n</article>\n</body>\n</html>",
+        "generatedAt": "2026-06-26T00:00:00.000Z",
+        "source": "fallback",
+        "context": {
+          "dataSource": "adult.csv",
+          "datasetName": "adult",
+          "title": "Adult 소득 분류 모델 분석보고서",
+          "split": {
+            "train_size": 0.8,
+            "random_state": 42,
+            "shuffle": true,
+            "stratify": false
+          },
+          "modelDefinition": {
+            "kind": "Decision Tree(의사결정나무)",
+            "params": {
+              "model_purpose": "classification",
+              "criterion": "gini",
+              "max_depth": 8,
+              "min_samples_split": 2,
+              "min_samples_leaf": 1
+            }
+          },
+          "features": [
+            "age",
+            "fnlwgt",
+            "education-num",
+            "capital-gain",
+            "capital-loss",
+            "hours-per-week"
+          ],
+          "labelColumn": "income",
+          "modelType": "Decision Tree(의사결정나무)",
+          "steps": [
+            {
+              "type": "LoadData",
+              "name": "Load",
+              "params": {
+                "source": "adult.csv"
+              }
+            },
+            {
+              "type": "DecisionTree",
+              "name": "Tree",
+              "params": {
+                "model_purpose": "classification",
+                "criterion": "gini",
+                "max_depth": 8,
+                "min_samples_split": 2,
+                "min_samples_leaf": 1
+              }
+            },
+            {
+              "type": "SplitData",
+              "name": "Split",
+              "params": {
+                "train_size": 0.8,
+                "random_state": 42,
+                "shuffle": "True",
+                "stratify": "False",
+                "stratify_column": null
+              }
+            },
+            {
+              "type": "TrainModel",
+              "name": "Train",
+              "params": {
+                "feature_columns": [
+                  "age",
+                  "fnlwgt",
+                  "education-num",
+                  "capital-gain",
+                  "capital-loss",
+                  "hours-per-week"
+                ],
+                "label_column": "income"
+              }
+            },
+            {
+              "type": "ScoreModel",
+              "name": "Score",
+              "params": {}
+            },
+            {
+              "type": "EvaluateModel",
+              "name": "Eval",
+              "params": {
+                "model_type": "classification",
+                "label_column": "income",
+                "prediction_column": "Predict",
+                "threshold": 0.5
+              }
+            }
+          ],
+          "rowCount": 32561,
+          "columnCount": 15,
+          "columns": [
+            "age",
+            "workclass",
+            "fnlwgt",
+            "education",
+            "education-num",
+            "marital-status",
+            "occupation",
+            "relationship",
+            "race",
+            "sex",
+            "capital-gain",
+            "capital-loss",
+            "hours-per-week",
+            "native-country",
+            "income"
+          ],
+          "extraInfo": "데이터: UCI Adult(Census Income), 이진 분류(income >50K 여부). 모델: 의사결정나무(criterion=gini, max_depth=8), 수치형 6개 특성(age·fnlwgt·education-num·capital-gain·capital-loss·hours-per-week). 파이프라인 끝 EvaluateModel 출력을 report_in_eval에 연결하면 개발 과정·지표·해석을 HTML 보고서로 생성한다(고급 사용자 실행, 키 없으면 결정적 폴백).",
+          "generatedAt": "2026-06-26"
+        }
       }
     }
   ],
