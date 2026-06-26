@@ -189,6 +189,13 @@ export const TOOLBOX_MODULES = [
     description:
       "Permutation feature importance for a trained model (deterministic).",
   },
+  {
+    type: ModuleType.ModelAnalysisReport,
+    name: "모델 분석보고서",
+    icon: DocumentTextIcon,
+    description:
+      "파이프라인 맨 끝에 두는 문서화 모듈. 업스트림 메타데이터+추가정보(PDF/텍스트)로 AI가 자기완결 HTML 분석보고서를 생성합니다(생성=고급, 열람=일반).",
+  },
 
   // Supervised Learning
   {
@@ -1021,6 +1028,27 @@ export const DEFAULT_MODULES: Omit<CanvasModule, "id" | "position" | "name">[] =
         { name: "data_in", type: "data" },
       ],
       outputs: [{ name: "data_out", type: "data" }],
+    },
+    {
+      // 문서화(메타) 모듈 — 파이프라인 말단. 출력 포트 없음.
+      // report_in(data)을 기본 입력으로, 평가(evaluation)/모델(model) 종단도 받도록
+      // 추가 입력 포트를 둔다(연결은 포트 type 일치 필요). 실제 메타데이터는 전체
+      // 업스트림 그래프를 역방향으로 거슬러 수집한다(어느 포트로 들어와도 동일).
+      type: ModuleType.ModelAnalysisReport,
+      status: ModuleStatus.Pending,
+      parameters: {
+        title: "",
+        extra_info: "",
+        extra_pdf_text: "",
+        extra_pdf_name: "",
+        use_web_research: true,
+      },
+      inputs: [
+        { name: "report_in", type: "data" },
+        { name: "report_in_eval", type: "evaluation" },
+        { name: "report_in_model", type: "model" },
+      ],
+      outputs: [],
     },
     {
       type: ModuleType.OLSModel,

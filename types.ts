@@ -42,6 +42,9 @@ export enum ModuleType {
   EvaluateModel = "EvaluateModel",
   FeatureImportance = "FeatureImportance",
 
+  // Documentation (meta) module — 파이프라인 말단. 분석 모듈이 아님(export/verify 무관).
+  ModelAnalysisReport = "ModelAnalysisReport",
+
   // Unsupervised Learning
   KMeans = "KMeans",
   PCA = "PCA",
@@ -527,6 +530,54 @@ export interface MortalityResultOutput {
   };
 }
 
+// --- Model Analysis Report (documentation / meta module) ---
+// 파이프라인 말단에 두는 문서화 모듈. AI(Gemini) 또는 결정적 폴백으로 자기완결 HTML 보고서를
+// 만들어 모듈 결과로 저장한다. 데이터 분석이 아니므로 export/verify 대상이 아니다.
+export interface ReportContext {
+  modelType?: string; // 예: "이진 분류", "회귀", "군집(KMeans)"
+  datasetName?: string;
+  dataSource?: string; // 파일명/경로
+  rowCount?: number;
+  columnCount?: number;
+  columns?: Array<{ name: string; type: string; sample?: string }>;
+  sampleRows?: Record<string, any>[]; // 원본 표본(처음 N행)
+  classDistribution?: Array<{ label: string; count: number; ratio?: number }>;
+  split?: {
+    train_size?: number;
+    random_state?: number | null;
+    shuffle?: boolean;
+    stratify?: boolean;
+  };
+  modelDefinition?: {
+    kind?: string; // 예: "DecisionTree"
+    params?: Record<string, any>;
+  };
+  features?: string[]; // 학습에 사용된 특성
+  labelColumn?: string;
+  metrics?: Record<string, number | string>;
+  confusionMatrix?: { tp: number; fp: number; tn: number; fn: number };
+  thresholdMetrics?: Array<Record<string, number>>; // 임계값 스윕(있으면)
+  steps?: Array<{ type: string; name: string; params?: Record<string, any> }>;
+  clustering?: {
+    k?: number;
+    inertia?: number;
+    nClusters?: number;
+    nNoise?: number;
+    distribution?: Array<{ cluster: string; count: number }>;
+  };
+  extraInfo?: string; // 사용자 추가정보(텍스트 + PDF 추출 텍스트 병합)
+  title?: string;
+  generatedAt?: string;
+}
+
+export interface ModelReportOutput {
+  type: "ModelReportOutput";
+  html: string;
+  generatedAt: string;
+  source: "ai" | "fallback";
+  context: ReportContext;
+}
+
 // =====================================================================
 // JMDC Analysis Outputs (PRD v2.0 §17, J1~J7)
 // =====================================================================
@@ -705,6 +756,7 @@ export interface CanvasModule {
     | VIFCheckerOutput
     | MortalityModelOutput
     | MortalityResultOutput
+    | ModelReportOutput
     | JMDCCohortOutput
     | JMDCOutcomeOutput
     | JMDCIncidenceOutput

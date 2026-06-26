@@ -61,6 +61,25 @@ export const MODULE_DESCRIPTIONS: Partial<
     connections: "LoadData → Statistics. (분기 모듈 — 데이터를 변형하지 않으므로 결과 확인용으로 곁가지로 둡니다.)",
     commonErrors: "범주형이 많으면 상관행렬이 비어 보일 수 있습니다 — 수치형 컬럼이 2개 이상 필요.",
   },
+  [ModuleType.ModelAnalysisReport]: {
+    title: "모델 분석보고서",
+    category: "문서화",
+    beginner:
+      "내가 만든 분석 파이프라인을 '보고서 한 장'으로 깔끔하게 정리해 주는 마무리 블록입니다. 데이터가 무엇이고, 어떤 모델을 어떻게 학습·평가했는지, 결과가 어땠는지를 표·그래프 없이도 읽기 쉬운 HTML 문서로 만들어 줍니다. 파이프라인 맨 끝에 연결해 두고 실행하면, 위쪽 모듈들의 정보를 자동으로 모아 보고서를 완성합니다.",
+    analysisMethod:
+      "이 모듈은 데이터를 계산하는 분석 모듈이 아니라 '문서화(메타)' 모듈입니다. 연결된 곳에서 위로 거슬러 올라가며 LoadData(데이터·컬럼)·SplitData(분할 설정)·모델 정의(하이퍼파라미터)·TrainModel(특성/타깃)·EvaluateModel(정확도·혼동행렬·임계값) 등 실행 결과 메타데이터를 모읍니다. 여기에 사용자가 넣은 추가 설명·PDF 텍스트를 합쳐, Gemini AI가 자기완결 HTML 보고서를 작성합니다(API 키가 없으면 메타데이터만으로 동일 양식의 결정적 보고서를 만듭니다). 모든 수치는 실제 실행 결과에서 가져오며 지어내지 않습니다.",
+    role: "파이프라인 말단에 두는 문서화 모듈. 업스트림 메타데이터+추가정보로 자기완결 HTML 분석보고서를 생성·저장합니다.",
+    input: "report_in(앞 모듈의 데이터/모델/평가 출력). 실제 메타데이터는 전체 업스트림 그래프에서 자동 수집됩니다.",
+    output: "ModelReportOutput(자기완결 HTML 문자열). '결과 보기'로 열람, 모달에서 HTML 다운로드·인쇄 가능.",
+    parameters:
+      "title(제목, 선택) · extra_info(추가 설명) · 참고 PDF(텍스트 추출) · use_web_research(입력 없을 때 AI 일반지식 배경 보강).",
+    whenToUse: "모델 개발을 마친 뒤 데이터·과정·결과를 문서로 남기고 싶을 때. 파이프라인 가장 마지막에 배치합니다.",
+    connections: "EvaluateModel · ScoreModel · ClusteringData 등 종단 모듈 → 모델 분석보고서. (출력 없음 = 말단)",
+    commonErrors:
+      "‘보고서 생성(실행)’은 고급기능입니다 — 상단 ‘고급기능 실행’으로 해제해야 실행됩니다(열람은 누구나 가능). 업스트림 모듈을 먼저 실행해 결과가 있어야 풍부한 보고서가 됩니다.",
+    notes:
+      "데이터 분석이 아닌 문서화 모듈이라 ‘전체 코드 보기(Python export)’·재현성 검증(verify) 대상이 아닙니다. 인용 수치는 업스트림의 결정적 결과에서 가져옵니다.",
+  },
   [ModuleType.SelectData]: {
     title: "Select Data",
     category: "데이터 가공",

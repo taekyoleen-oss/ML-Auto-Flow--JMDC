@@ -2680,6 +2680,19 @@ export const getModuleCode = (
     ].join("\n");
   }
 
+  // ModelAnalysisReport: 데이터 분석이 아닌 문서화(메타) 모듈.
+  // Python export·verify 대상이 아니므로 실행 코드를 내보내지 않고 안내 주석만 남긴다
+  // (전체 코드 파이프라인에 들어가도 부작용이 없도록 no-op).
+  if (module.type === "ModelAnalysisReport") {
+    return [
+      "# === 모델 분석보고서(ModelAnalysisReport) — 문서화(메타) 모듈 ===",
+      "# 이 모듈은 데이터 분석이 아니라, 파이프라인 메타데이터로 HTML 보고서를 만드는 문서화 모듈입니다.",
+      "# 따라서 Python 코드 내보내기/재현성 검증(verify) 대상이 아닙니다(분석 로직 없음).",
+      "# 보고서가 인용하는 수치는 위쪽(업스트림) 분석 모듈의 결정적 결과에서 가져옵니다.",
+      "pass",
+    ].join("\n");
+  }
+
   // ResultModel의 경우 연결된 모델 타입에 따라 코드 생성
   if (module.type === "ResultModel" && allModules && connections) {
     const modelInputConnection = connections.find(

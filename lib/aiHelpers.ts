@@ -2,7 +2,9 @@
 // 모든 함수는 중앙 클라이언트(getGeminiClient)를 사용하므로, 키 관리/폴백/에러 처리가 한 곳에서 일관되게 동작한다.
 // AI 기능을 새로 붙일 때는 새 호출부에서 new GoogleGenAI를 만들지 말고 이 헬퍼를 재사용한다.
 
-import { getGeminiClient } from "./aiClient";
+import { getGeminiClient, hasApiKey } from "./aiClient";
+import { ReportContext } from "../types";
+import { buildModelReportHtmlFallback } from "../utils/modelReport";
 
 /** 빠른 응답용 기본 모델. 무거운 추론이 필요하면 gemini-2.5-pro로 교체 가능. */
 export const DEFAULT_AI_MODEL = "gemini-2.5-flash";
@@ -91,4 +93,82 @@ export async function* streamSuggestErrorFix(
   context?: string
 ): AsyncGenerator<string> {
   yield* streamPrompt(buildSuggestErrorFixPrompt(errorMessage, context));
+}
+
+// ---------------------------------------------------------------------------
+// 모델 분석보고서(ModelAnalysisReport) — 자기완결 HTML 보고서 생성.
+// 문서화(메타) 기능: codeSnippets/export/verify와 무관(Python 재현성 불변식 비대상).
+// ---------------------------------------------------------------------------
+
+/** AI가 생성한 HTML이 자기완결·안전한지 검증한다(<html> 포함, <script> 없음). */
+function isValidReportHtml(html: string): boolean {
+  if (!html || html.length < 200) return false;
+  const lower = html.toLowerCase();
+  if (!lower.includes("<html")) return false;
+  if (lower.includes("<script")) return false; // 보안: 스크립트 금지
+  return true;
+}
+
+/** AI 응답에서 코드펜스(```html …```)를 제거하고 HTML만 남긴다. */
+function stripHtmlFence(text: string): string {
+  let t = (text || "").trim();
+  // ```html ... ``` 또는 ``` ... ``` 제거
+  const fence = t.match(/```(?:html)?\s*([\s\S]*?)```/i);
+  if (fence && fence[1]) t = fence[1].trim();
+  // 앞부분 잡설이 있으면 <!DOCTYPE 또는 <html부터 시작.
+  const idx = t.search(/<!doctype html|<html/i);
+  if (idx > 0) t = t.slice(idx);
+  return t.trim();
+}
+
+function buildModelReportPrompt(ctx: ReportContext): string {
+  const styleHint =
+    'CSS 변수(--ink/--muted/--line/--accent/--accent-soft/--th 등)와 .report/.cover/.badge/.callout/.callout.warn/.kpi-grid/.kpi/table(th,td,.num)/pre 클래스를 사용한 인라인 <style>를 head에 포함하라(예시 디자인과 동일한 깔끔한 문서 스타일).';
+  return `너는 ML 모델 문서 작성가다. 아래 파이프라인 메타데이터(JSON)와 사용자 추가정보만으로, 한국어 **자기완결 HTML** 모델 분석보고서를 1개 작성한다.
+
+[필수 규칙]
+1) 메타데이터에 있는 수치만 사용한다(수치 창작 절대 금지). 없는 값은 비우거나 "(자료 없음)"으로 둔다.
+2) 데이터셋/도메인 배경 서술에 일반 지식을 쓸 수 있으나, 그런 문장은 "(일반 지식 기반)"으로 표기해 실측과 구분한다.
+3) 출력은 \`<!DOCTYPE html>\`로 시작하는 **완전한 HTML 1개**. 외부 CSS/JS/폰트 0, \`<script>\` 태그 절대 금지(보안). ${styleHint}
+4) 섹션 구조: 표지(badge "모델 분석보고서")·1.요약(+KPI 그리드)·2.데이터셋 개요(표+표본)·3.변수(컬럼) 사전(사용/미사용 특성 명시)·4.타깃/클래스 또는 군집 분포·5.모델 개발 과정(파이프라인 다이어그램 pre + 단계별 파라미터)·6.분석 결과와 해석(혼동행렬·임계값·지표)·7.재현성·8.결론 및 한계.
+5) 표·callout·KPI 카드를 적극 활용하고, 미사용 특성·클래스 불균형 등 한계를 정직하게 기술한다.
+6) HTML 외에 다른 텍스트(설명·코드펜스)를 출력하지 마라.
+
+[파이프라인 메타데이터 JSON]
+${JSON.stringify(ctx, null, 2)}
+
+${
+  ctx.extraInfo && ctx.extraInfo.trim()
+    ? `[사용자 추가정보 — 최우선 근거로 반영]\n${ctx.extraInfo.trim()}`
+    : "[사용자 추가정보 없음 — 데이터셋/도메인 배경은 일반 지식으로 보강하되 '(일반 지식 기반)'으로 표기하라]"
+}`;
+}
+
+/**
+ * 모델 분석보고서 HTML을 생성한다.
+ * - API 키가 없으면 모달을 띄우지 않고 결정적 폴백 HTML을 반환한다(일반 사용자도 결과 열람 가능).
+ * - 키가 있으면 gemini-2.5-pro로 생성(실패/한도 시 flash 재시도, 그래도 실패하면 폴백).
+ * - AI 출력은 자기완결·안전(<html> 포함·<script> 없음) 검증을 통과해야 채택된다.
+ */
+export async function generateModelReportHtml(
+  ctx: ReportContext
+): Promise<{ html: string; source: "ai" | "fallback" }> {
+  if (!hasApiKey()) {
+    return { html: buildModelReportHtmlFallback(ctx), source: "fallback" };
+  }
+  const prompt = buildModelReportPrompt(ctx);
+  const models = ["gemini-2.5-pro", DEFAULT_AI_MODEL];
+  for (const model of models) {
+    try {
+      const raw = await runPrompt(prompt, model);
+      const html = stripHtmlFence(raw);
+      if (isValidReportHtml(html)) {
+        return { html, source: "ai" };
+      }
+    } catch (err) {
+      // 다음 모델로 재시도. 마지막 실패 시 폴백.
+      console.warn(`[generateModelReportHtml] ${model} 실패:`, err);
+    }
+  }
+  return { html: buildModelReportHtmlFallback(ctx), source: "fallback" };
 }

@@ -105,6 +105,7 @@ import { XoLPricePreviewModal } from "./components/XoLPricePreviewModal";
 import { FinalXolPricePreviewModal } from "./components/FinalXolPricePreviewModal";
 import { PredictModelPreviewModal } from "./components/PredictModelPreviewModal";
 import { EvaluationPreviewModal } from "./components/EvaluationPreviewModal";
+import { ModelReportPreviewModal } from "./components/ModelReportPreviewModal";
 import { ColumnPlotPreviewModal } from "./components/ColumnPlotPreviewModal";
 import { OutlierDetectorPreviewModal } from "./components/OutlierDetectorPreviewModal";
 import { HypothesisTestingPreviewModal } from "./components/HypothesisTestingPreviewModal";
@@ -249,6 +250,8 @@ const App: React.FC = () => {
   const [viewingClusteringData, setViewingClusteringData] =
     useState<CanvasModule | null>(null);
   const [viewingTrainedClusteringModel, setViewingTrainedClusteringModel] =
+    useState<CanvasModule | null>(null);
+  const [viewingModelReport, setViewingModelReport] =
     useState<CanvasModule | null>(null);
   // JMDC Analysis (PRD v2.0 §17, J1~J7)
   const [viewingJMDCCohort, setViewingJMDCCohort] = useState<CanvasModule | null>(null);
@@ -3564,6 +3567,9 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
           "Setting viewingTrainedClusteringModel for TrainedClusteringModelOutput"
         );
         setViewingTrainedClusteringModel(module);
+      } else if (module.outputData.type === "ModelReportOutput") {
+        // 모델 분석보고서 결과 — 열람은 게이트 없음(일반 사용자 가능).
+        setViewingModelReport(module);
       } else if (module.outputData.type === "JMDCCohortOutput") {
         setViewingJMDCCohort(module);
       } else if (module.outputData.type === "JMDCOutcomeOutput") {
@@ -3607,6 +3613,7 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
     setViewingCorrelation(null);
     setViewingTrainedClusteringModel(null);
     setViewingClusteringData(null);
+    setViewingModelReport(null);
     setViewingJMDCCohort(null);
     setViewingJMDCIncidence(null);
     setViewingJMDCSurvival(null);
@@ -11017,6 +11024,75 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
             addLog("ERROR", `클러스터링 데이터 처리 실패: ${errorMessage}`);
             throw new Error(`클러스터링 데이터 처리 실패: ${errorMessage}`);
           }
+        } else if (module.type === ModuleType.ModelAnalysisReport) {
+          // 문서화(메타) 모듈 — 데이터 분석 아님(export/verify 무관).
+          // 실행(생성)은 고급 사용자만. 일반 사용자는 거부(열람은 게이트 없음).
+          if (!isAdvancedUnlocked) {
+            addLog(
+              "INFO",
+              "모델 분석보고서 '생성'은 고급기능입니다. 상단 '고급기능 실행'으로 해제 후 다시 실행하세요. (기존 보고서 '열람'은 누구나 가능)"
+            );
+            throw new Error(
+              "모델 분석보고서 생성은 고급기능입니다. 상단 '고급기능 실행'으로 잠금을 해제한 뒤 다시 실행해 주세요."
+            );
+          }
+          try {
+            addLog(
+              "INFO",
+              "업스트림 파이프라인 메타데이터를 수집하여 분석보고서를 생성합니다…"
+            );
+            const { gatherReportContext } = await import("./utils/modelReport");
+            const { generateModelReportHtml } = await import("./lib/aiHelpers");
+
+            // 최신 모듈 상태(실행 결과 outputData 포함)에서 수집.
+            const latestModules = getCurrentModules();
+            const latestModule =
+              latestModules.find((m) => m.id === module.id) || module;
+            const ctx = gatherReportContext(
+              latestModule,
+              latestModules,
+              connections
+            );
+
+            // 사용자 추가정보(텍스트) + PDF 추출 텍스트 병합 → extraInfo.
+            const extraText = String(
+              latestModule.parameters?.extra_info || ""
+            ).trim();
+            const pdfText = String(
+              latestModule.parameters?.extra_pdf_text || ""
+            ).trim();
+            const pdfName = String(
+              latestModule.parameters?.extra_pdf_name || ""
+            ).trim();
+            const mergedExtra = [
+              extraText,
+              pdfText
+                ? `${pdfName ? `[첨부 PDF: ${pdfName}]\n` : ""}${pdfText}`
+                : "",
+            ]
+              .filter(Boolean)
+              .join("\n\n");
+            if (mergedExtra) ctx.extraInfo = mergedExtra;
+            ctx.generatedAt = new Date().toISOString().slice(0, 10);
+
+            const { html, source } = await generateModelReportHtml(ctx);
+
+            newOutputData = {
+              type: "ModelReportOutput",
+              html,
+              generatedAt: new Date().toISOString(),
+              source,
+              context: ctx,
+            };
+            addLog(
+              "SUCCESS",
+              `모델 분석보고서 생성 완료 (${source === "ai" ? "AI 생성" : "결정적 폴백"}).`
+            );
+          } catch (error: any) {
+            const errorMessage = error.message || String(error);
+            addLog("ERROR", `모델 분석보고서 생성 실패: ${errorMessage}`);
+            throw new Error(`모델 분석보고서 생성 실패: ${errorMessage}`);
+          }
         } else {
           const inputConnection = connections.find(
             (c) => c.to.moduleId === module.id
@@ -12920,6 +12996,17 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
             />
           );
         })()}
+
+      {/* 모델 분석보고서 미리보기 (열람은 게이트 없음) */}
+      {viewingModelReport && (
+        <ModelReportPreviewModal
+          module={
+            modules.find((m) => m.id === viewingModelReport.id) ||
+            viewingModelReport
+          }
+          onClose={handleCloseModal}
+        />
+      )}
 
       {/* C-2: 모델 비교 모달 */}
       {showModelComparison && (
