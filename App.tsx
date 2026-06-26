@@ -311,6 +311,8 @@ const App: React.FC = () => {
   const myWorkMenuRef = useRef<HTMLDivElement>(null);
   const [myWorkModels, setMyWorkModels] = useState<any[]>([]);
   const isSavingRef = useRef(false); // 저장 중 플래그
+  // 샘플 로드 중에는 보고서 리셋을 억제(베이크된 폴백 보고서가 지워지지 않게).
+  const suppressReportResetRef = useRef(false);
   // 저장 옵션 모달(데이터 포함/제외·웹 등록·설명 선택)
   const [saveOptions, setSaveOptions] = useState<{
     open: boolean;
@@ -377,6 +379,8 @@ const App: React.FC = () => {
    * 보고서가 없으면 no-op. 일반 사용자에게도 안전(상태만 초기화).
    */
   const resetModelReportsOnChange = useCallback(() => {
+    // 샘플 로드 중에는 억제(베이크된 폴백 보고서 보존).
+    if (suppressReportResetRef.current) return;
     setModules((prev) => {
       let changed = false;
       const next = prev.map((m) => {
@@ -2449,6 +2453,8 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
         "sampleId:",
         sampleId
       );
+      // 샘플 로드 동안 보고서 리셋 억제(베이크된 폴백 보고서 보존).
+      suppressReportResetRef.current = true;
       try {
         let sampleModel: any = null;
 
@@ -2530,8 +2536,11 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
               id: moduleId,
               name: m.name || defaultName,
               position: m.position || { x: 0, y: 0 },
-              status: ModuleStatus.Pending,
+              // 베이크된 outputData(예: 폴백 분석보고서 HTML)가 있으면 살리고
+              // Success로 표시해 일반 사용자도 결과를 바로 열람할 수 있게 한다.
+              status: m.outputData ? ModuleStatus.Success : ModuleStatus.Pending,
               parameters: m.parameters || {}, // 파라미터도 로드
+              ...(m.outputData ? { outputData: m.outputData } : {}),
             };
           }
         );
@@ -2706,6 +2715,12 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
           `Failed to load sample: ${error.message || "Unknown error"}`
         );
         setIsSampleMenuOpen(false);
+      } finally {
+        // setModules/setConnections 반영(다음 틱) 후 억제 해제 — 그 사이의
+        // 구조 변경 감지가 베이크된 보고서를 지우지 못하게 한다.
+        setTimeout(() => {
+          suppressReportResetRef.current = false;
+        }, 0);
       }
     },
     [resetModules, addLog, handleFitToView]

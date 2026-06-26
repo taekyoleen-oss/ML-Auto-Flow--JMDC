@@ -373,7 +373,7 @@ function datasetTable(ctx: ReportContext): string {
     <tr><th>행 수</th><td>${escapeHtml(fmtNum(ctx.rowCount))}</td></tr>
     <tr><th>열 수</th><td>${escapeHtml(fmtNum(ctx.columnCount))}</td></tr>
     <tr><th>모델 유형</th><td>${escapeHtml(ctx.modelType || NA)}</td></tr>
-    <tr><th>타깃 변수</th><td>${escapeHtml(ctx.labelColumn ? `<code>${ctx.labelColumn}</code>` : NA)}</td></tr>
+    <tr><th>타깃 변수</th><td>${ctx.labelColumn ? `<code>${escapeHtml(ctx.labelColumn)}</code>` : NA}</td></tr>
   </tbody></table>`;
 }
 
