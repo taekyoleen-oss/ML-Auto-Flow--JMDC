@@ -144,10 +144,24 @@ ${
 }`;
 }
 
+/** 429/rate-limit/quota 류 일시적 한도 에러인지 메시지 기반 판별. */
+function isRateLimitError(err: unknown): boolean {
+  const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    m.includes("429") ||
+    m.includes("resource_exhausted") ||
+    m.includes("rate limit") ||
+    m.includes("rate-limit") ||
+    m.includes("too many requests") ||
+    m.includes("quota")
+  );
+}
+
 /**
  * 모델 분석보고서 HTML을 생성한다.
  * - API 키가 없으면 모달을 띄우지 않고 결정적 폴백 HTML을 반환한다(일반 사용자도 결과 열람 가능).
- * - 키가 있으면 gemini-2.5-pro로 생성(실패/한도 시 flash 재시도, 그래도 실패하면 폴백).
+ * - flash-first로 생성하며, flash가 429(무료티어 RPM/RPD)면 짧은 백오프 후 1회 재시도한다.
+ *   그래도 실패하면 pro(유료 키 환경) 시도, 최종 실패 시 결정적 폴백으로 graceful degradation.
  * - AI 출력은 자기완결·안전(<html> 포함·<script> 없음) 검증을 통과해야 채택된다.
  */
 export async function generateModelReportHtml(
@@ -157,19 +171,29 @@ export async function generateModelReportHtml(
     return { html: buildModelReportHtmlFallback(ctx), source: "fallback" };
   }
   const prompt = buildModelReportPrompt(ctx);
-  // flash-first: 무료티어 키는 gemini-2.5-pro 할당량이 0(429)이므로 flash를 먼저 시도해
-  // 단일 호출로 실제 AI 생성을 받는다. flash 실패 시에만 pro(유료 키 환경) 시도, 그래도 실패면 폴백.
+  // flash-first: 무료티어 키는 gemini-2.5-pro 할당량이 0(429)이므로 flash를 먼저 시도한다.
   const models = [DEFAULT_AI_MODEL, "gemini-2.5-pro"];
   for (const model of models) {
-    try {
-      const raw = await runPrompt(prompt, model);
-      const html = stripHtmlFence(raw);
-      if (isValidReportHtml(html)) {
-        return { html, source: "ai" };
+    // flash는 무료티어 RPM 한도로 일시적 429가 잦으므로 1회 백오프 재시도.
+    // pro는 무료티어에서 구조적 429(limit:0)라 재시도가 무의미하므로 1회만 시도한다.
+    const maxAttempts = model === DEFAULT_AI_MODEL ? 2 : 1;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const raw = await runPrompt(prompt, model);
+        const html = stripHtmlFence(raw);
+        if (isValidReportHtml(html)) {
+          return { html, source: "ai" };
+        }
+        break; // 응답은 받았으나 HTML이 유효하지 않음 → 같은 모델 재시도 불필요, 다음 모델로
+      } catch (err) {
+        if (isRateLimitError(err) && attempt < maxAttempts) {
+          console.warn(`[generateModelReportHtml] ${model} 429 — ${attempt}차, 15초 백오프 후 재시도`);
+          await new Promise((resolve) => setTimeout(resolve, 15000));
+          continue;
+        }
+        console.warn(`[generateModelReportHtml] ${model} 실패:`, err);
+        break; // 비-429 또는 재시도 소진 → 다음 모델
       }
-    } catch (err) {
-      // 다음 모델로 재시도. 마지막 실패 시 폴백.
-      console.warn(`[generateModelReportHtml] ${model} 실패:`, err);
     }
   }
   return { html: buildModelReportHtmlFallback(ctx), source: "fallback" };
