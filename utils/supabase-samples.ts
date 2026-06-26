@@ -7,6 +7,9 @@ import { supabase, isSupabaseConfigured } from "../lib/supabase";
 export { isSupabaseConfigured };
 
 const APP_SECTION = "ML";
+// [JMDC 전용] JMDC 앱 샘플 메뉴는 공유(ML) + JMDC 전용(JMDC) 섹션을 모두 표시한다.
+// (베이스 ML 앱은 "ML"만 조회하므로 JMDC 전용 샘플은 ML 메뉴에서 숨겨진다.)
+const LIST_SECTIONS = ["ML", "JMDC"];
 
 export interface SampleModelRow {
   id: string;
@@ -59,7 +62,7 @@ export interface AutoflowSampleWithContent {
   input_data_content: string | null;
 }
 
-/** 목록 조회 (app_section = ML만) */
+/** 목록 조회 (JMDC 앱: 공유 ML + JMDC 전용 섹션 모두) */
 export async function fetchAutoflowSamplesList(): Promise<AutoflowSampleListItem[]> {
   if (!isSupabaseConfigured() || !supabase) return [];
 
@@ -79,7 +82,7 @@ export async function fetchAutoflowSamplesList(): Promise<AutoflowSampleListItem
       sample_input_data ( name )
     `
     )
-    .eq("app_section", APP_SECTION)
+    .in("app_section", LIST_SECTIONS)
     .order("created_at", { ascending: false });
 
   const { data: rows, error } = await query;
