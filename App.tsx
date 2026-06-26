@@ -278,6 +278,9 @@ const App: React.FC = () => {
   // #11: Run All 진행률 상태
   const [runAllProgress, setRunAllProgress] = useState<{ current: number; total: number } | null>(null);
 
+  // '모델 분석보고서 생성' 버튼(고급) 진행 상태(중복 실행 방지·로딩 표시).
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+
   const [isAiGenerating, setIsAiGenerating] = useState(false);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
@@ -366,6 +369,30 @@ const App: React.FC = () => {
   const isDraggingControlPanel = useRef(false);
   const controlPanelDragOffset = useRef({ x: 0, y: 0 });
 
+  /**
+   * 모델 구조·내용이 바뀌면(비-보고서 모듈의 파라미터/연결/추가·삭제) 기존
+   * '모델 분석보고서' 모듈들을 미실행(Pending)·출력 비움 상태로 되돌린다.
+   * 이렇게 하면 보고서가 변경 전 모델을 설명하는 stale 문서로 남지 않는다.
+   * (보고서 자신·보고서로의 연결 변경은 호출 측에서 가드하여 제외한다.)
+   * 보고서가 없으면 no-op. 일반 사용자에게도 안전(상태만 초기화).
+   */
+  const resetModelReportsOnChange = useCallback(() => {
+    setModules((prev) => {
+      let changed = false;
+      const next = prev.map((m) => {
+        if (
+          m.type === ModuleType.ModelAnalysisReport &&
+          (m.outputData !== undefined || m.status !== ModuleStatus.Pending)
+        ) {
+          changed = true;
+          return { ...m, status: ModuleStatus.Pending, outputData: undefined };
+        }
+        return m;
+      });
+      return changed ? next : prev;
+    });
+  }, [setModules]);
+
   const setConnections = useCallback(
     (value: React.SetStateAction<Connection[]>) => {
       const prevConnections = connections;
@@ -407,8 +434,24 @@ const App: React.FC = () => {
 
       _setConnections(newConnections);
       setIsDirty(true);
+
+      // 모델 구조(연결) 변경 시 기존 '모델 분석보고서' 리셋.
+      // 단, 보고서 모듈 자신을 한쪽 끝으로 하는 연결의 추가·삭제는 제외(보고서 자동연결/배선).
+      const addedConnections = newConnections.filter(
+        (nc) => !prevConnections.some((c) => c.id === nc.id)
+      );
+      const isReportEndpoint = (c: Connection) =>
+        modules.some(
+          (m) =>
+            m.type === ModuleType.ModelAnalysisReport &&
+            (m.id === c.from.moduleId || m.id === c.to.moduleId)
+        );
+      const structuralChange = [...addedConnections, ...removedConnections].some(
+        (c) => !isReportEndpoint(c)
+      );
+      if (structuralChange) resetModelReportsOnChange();
     },
-    [connections, modules, setModules]
+    [connections, modules, setModules, resetModelReportsOnChange]
   );
 
   // Save current canvas state to the active tab (for tab switching)
@@ -3079,8 +3122,10 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
       setModules((prev) => [...prev, newModule]);
       setSelectedModuleIds([newModule.id]);
       setIsDirty(true);
+      // 비-보고서 모듈 추가 → 모델 구조 변경 → 기존 보고서 리셋(보고서 추가 자체는 제외).
+      if (type !== ModuleType.ModelAnalysisReport) resetModelReportsOnChange();
     },
-    [modules, setModules, setSelectedModuleIds, clearSuggestion, addLog]
+    [modules, setModules, setSelectedModuleIds, clearSuggestion, addLog, resetModelReportsOnChange]
   );
 
   const handleModuleToolboxDoubleClick = useCallback(
@@ -3394,8 +3439,14 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
         });
       });
       setIsDirty(true);
+      // 비-보고서 모듈 파라미터가 바뀌면 모델이 달라진 것 → 기존 보고서 리셋.
+      // (보고서 자신의 파라미터 편집(제목/추가정보 등)은 제외.)
+      const editedModule = modules.find((m) => m.id === id);
+      if (editedModule && editedModule.type !== ModuleType.ModelAnalysisReport) {
+        resetModelReportsOnChange();
+      }
     },
-    [setModules, connections, getDownstreamModules]
+    [setModules, connections, getDownstreamModules, modules, resetModelReportsOnChange]
   );
 
   const updateModule = useCallback(
@@ -3445,6 +3496,12 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
 
   const deleteModules = useCallback(
     (idsToDelete: string[]) => {
+      // 삭제 대상에 비-보고서 모듈이 포함되면 모델 구조가 바뀐 것 → 보고서 리셋.
+      const deletingNonReport = modules.some(
+        (m) =>
+          idsToDelete.includes(m.id) &&
+          m.type !== ModuleType.ModelAnalysisReport
+      );
       setModules((prev) => prev.filter((m) => !idsToDelete.includes(m.id)));
       setConnections((prev) =>
         prev.filter(
@@ -3457,8 +3514,9 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
         prev.filter((id) => !idsToDelete.includes(id))
       );
       setIsDirty(true);
+      if (deletingNonReport) resetModelReportsOnChange();
     },
-    [setModules, setConnections, setSelectedModuleIds]
+    [modules, setModules, setConnections, setSelectedModuleIds, resetModelReportsOnChange]
   );
 
   const handleViewDetails = (moduleId: string) => {
@@ -10995,12 +11053,39 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
           // 문서화(메타) 모듈 — 데이터 분석 아님(export/verify 무관).
           // 실행(생성)은 고급 사용자만. 일반 사용자는 거부(열람은 게이트 없음).
           if (!isAdvancedUnlocked) {
+            // 전체 실행: 일반 사용자는 보고서 모듈을 에러 없이 건너뛰고 기존 출력 보존.
+            if (runAll) {
+              addLog(
+                "INFO",
+                `[${moduleName}] 모델 분석보고서 생성은 고급기능이라 전체 실행에서 건너뜁니다. (기존 보고서는 그대로 열람 가능)`
+              );
+              // 기존 출력이 있으면 보존, 없으면 Pending 유지(미실행 안내).
+              newOutputData = module.outputData;
+              newStatus = module.outputData
+                ? ModuleStatus.Success
+                : ModuleStatus.Pending;
+              logLevel = "INFO";
+              logMessage = `Module [${moduleName}] skipped (advanced-only generation).`;
+              const skipState = {
+                ...module,
+                status: newStatus,
+                outputData: newOutputData,
+              };
+              const skipIdx = currentModules.findIndex((m) => m.id === moduleId);
+              if (skipIdx !== -1) currentModules[skipIdx] = skipState;
+              setModules((prev) =>
+                prev.map((m) => (m.id === moduleId ? skipState : m))
+              );
+              addLog(logLevel, logMessage);
+              continue;
+            }
+            // 개별 실행: 일반 사용자는 거부(명확한 안내).
             addLog(
               "INFO",
-              "모델 분석보고서 '생성'은 고급기능입니다. 상단 '고급기능 실행'으로 해제 후 다시 실행하세요. (기존 보고서 '열람'은 누구나 가능)"
+              "모델 분석보고서 '생성'은 고급기능입니다. 상단 '✨ 모델 분석보고서 생성'(고급 해제 후)으로 만드세요. (기존 보고서 '열람'은 누구나 가능)"
             );
             throw new Error(
-              "모델 분석보고서 생성은 고급기능입니다. 상단 '고급기능 실행'으로 잠금을 해제한 뒤 다시 실행해 주세요."
+              "모델 분석보고서 생성은 고급기능입니다. 상단 '고급기능 실행'으로 잠금을 해제한 뒤 '✨ 모델 분석보고서 생성' 버튼을 사용하세요."
             );
           }
           try {
@@ -11200,6 +11285,231 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
     }
   };
 
+  /**
+   * ✨ 모델 분석보고서 생성(고급 전용, 자동연결+생성).
+   * 1) 종단 모델 모듈 탐색(EvaluateModel > Train(Clustering)Model > ClusteringData > 마지막 data 출력).
+   * 2) 보고서 모듈 확보(기존 재사용 또는 신규 생성, 종단 아래 배치).
+   * 3) 자동 연결(종단 출력 타입 → 대응 report 입력 포트, 기존 보고서 입력 연결은 제거).
+   * 4) 실행(gather→generateModelReportHtml(onProgress))→outputData 세팅→미리보기 자동 오픈.
+   * runSimulation을 거치지 않고 인라인 수집/생성하여(클로저 stale 회피) 새로 만든 모듈/연결을 바로 반영한다.
+   */
+  const handleGenerateModelReport = async () => {
+    if (isGeneratingReport) return;
+    if (!isAdvancedUnlocked) {
+      addLog(
+        "INFO",
+        "모델 분석보고서 생성은 고급기능입니다. 상단 '고급기능 실행'으로 잠금을 해제하세요."
+      );
+      return;
+    }
+
+    // 1) 종단 모델 모듈 탐색.
+    // 주요 출력 포트가 (보고서가 아닌) 다른 모듈로 연결되지 않은 '종단'을 찾는다.
+    const PRIMARY_OUTPUT: Partial<Record<ModuleType, { port: string; type: "data" | "model" | "evaluation" }>> = {
+      [ModuleType.EvaluateModel]: { port: "evaluation_out", type: "evaluation" },
+      [ModuleType.TrainClusteringModel]: { port: "trained_model_out", type: "model" },
+      [ModuleType.TrainModel]: { port: "trained_model_out", type: "model" },
+      [ModuleType.ClusteringData]: { port: "clustered_data_out", type: "data" },
+    };
+    // data 출력(말단) 폴백 후보(주요 모델 출력이 없을 때).
+    const reportModulePresent = (m: CanvasModule) =>
+      m.type === ModuleType.ModelAnalysisReport;
+
+    const isTerminalOutput = (m: CanvasModule, portName: string) =>
+      !connections.some(
+        (c) =>
+          c.from.moduleId === m.id &&
+          c.from.portName === portName &&
+          !modules.some(
+            (dst) => dst.id === c.to.moduleId && reportModulePresent(dst)
+          )
+      );
+
+    type Terminal = { module: CanvasModule; port: string; type: "data" | "model" | "evaluation" };
+    const collectTerminals = (type: ModuleType): Terminal[] => {
+      const info = PRIMARY_OUTPUT[type];
+      if (!info) return [];
+      return modules
+        .filter((m) => m.type === type && isTerminalOutput(m, info.port))
+        .map((m) => ({ module: m, port: info.port, type: info.type }));
+    };
+
+    let terminal: Terminal | undefined =
+      collectTerminals(ModuleType.EvaluateModel)[0] ||
+      collectTerminals(ModuleType.TrainClusteringModel)[0] ||
+      collectTerminals(ModuleType.TrainModel)[0] ||
+      collectTerminals(ModuleType.ClusteringData)[0];
+
+    // 폴백: 위 모델 종단이 없으면 마지막 data 출력(말단) 모듈.
+    if (!terminal) {
+      const dataTerminals = modules
+        .filter(
+          (m) =>
+            m.type !== ModuleType.ModelAnalysisReport &&
+            m.type !== ModuleType.TextBox &&
+            m.type !== ModuleType.GroupBox &&
+            (m.outputs || []).some(
+              (p) => p.type === "data" && isTerminalOutput(m, p.name)
+            )
+        )
+        .map((m) => {
+          const port = (m.outputs || []).find(
+            (p) => p.type === "data" && isTerminalOutput(m, p.name)
+          )!;
+          return { module: m, port: port.name, type: "data" as const };
+        });
+      terminal = dataTerminals[dataTerminals.length - 1];
+    }
+
+    if (!terminal) {
+      addLog(
+        "INFO",
+        "분석할 모델이 없습니다. EvaluateModel 등 모델 파이프라인을 먼저 구성·실행하세요."
+      );
+      return;
+    }
+
+    // 종단 출력 타입 → 대응 report 입력 포트.
+    const reportPortByType: Record<"data" | "model" | "evaluation", string> = {
+      evaluation: "report_in_eval",
+      model: "report_in_model",
+      data: "report_in",
+    };
+    const targetReportPort = reportPortByType[terminal.type];
+
+    setIsGeneratingReport(true);
+    try {
+      // 2) 보고서 모듈 확보(기존 재사용 또는 신규).
+      let reportModule = modules.find(
+        (m) => m.type === ModuleType.ModelAnalysisReport
+      );
+      let workingModules = modules;
+      if (reportModule) {
+        // 기존 재사용 — 출력 비우고 Pending.
+        const reused = {
+          ...reportModule,
+          status: ModuleStatus.Pending,
+          outputData: undefined,
+        };
+        reportModule = reused;
+        workingModules = modules.map((m) => (m.id === reused.id ? reused : m));
+      } else {
+        // 신규 생성 — constants 템플릿 기반, 종단 아래(x, y+260)에 배치.
+        const tpl = DEFAULT_MODULES.find(
+          (m) => m.type === ModuleType.ModelAnalysisReport
+        );
+        const count =
+          modules.filter((m) => m.type === ModuleType.ModelAnalysisReport)
+            .length + 1;
+        const created: CanvasModule = {
+          id: `${ModuleType.ModelAnalysisReport}-${Date.now()}`,
+          name: `모델 분석보고서 ${count}`,
+          type: ModuleType.ModelAnalysisReport,
+          position: {
+            x: terminal.module.position.x,
+            y: terminal.module.position.y + 260,
+          },
+          status: ModuleStatus.Pending,
+          parameters: { ...(tpl?.parameters || {}) },
+          inputs: [...(tpl?.inputs || [])],
+          outputs: [...(tpl?.outputs || [])],
+        };
+        reportModule = created;
+        workingModules = [...modules, created];
+      }
+
+      const reportId = reportModule.id;
+
+      // 3) 자동 연결 — 보고서로 들어오는 기존 연결 제거 후 종단→대응 포트 1개 추가.
+      const newConnection: Connection = {
+        id: `report-conn-${Date.now()}`,
+        from: { moduleId: terminal.module.id, portName: terminal.port },
+        to: { moduleId: reportId, portName: targetReportPort },
+      };
+      const workingConnections = [
+        ...connections.filter((c) => c.to.moduleId !== reportId),
+        newConnection,
+      ];
+
+      // 모듈/연결을 먼저 커밋(자동연결 시각화). _setConnections로 리셋 가드 우회.
+      setModules(() => workingModules);
+      _setConnections(workingConnections);
+      setIsDirty(true);
+
+      addLog(
+        "INFO",
+        `종단 모듈 [${terminal.module.name}]을(를) 보고서에 연결하고 분석보고서를 생성합니다…`
+      );
+
+      // 4) 인라인 수집/생성(runSimulation 미경유 — 방금 만든 모듈/연결을 바로 사용).
+      const { gatherReportContext } = await import("./utils/modelReport");
+      const { generateModelReportHtml } = await import("./lib/aiHelpers");
+
+      const latestReport =
+        workingModules.find((m) => m.id === reportId) || reportModule;
+      const ctx = gatherReportContext(
+        latestReport,
+        workingModules,
+        workingConnections
+      );
+
+      const extraText = String(latestReport.parameters?.extra_info || "").trim();
+      const pdfText = String(
+        latestReport.parameters?.extra_pdf_text || ""
+      ).trim();
+      const pdfName = String(
+        latestReport.parameters?.extra_pdf_name || ""
+      ).trim();
+      const mergedExtra = [
+        extraText,
+        pdfText
+          ? `${pdfName ? `[첨부 PDF: ${pdfName}]\n` : ""}${pdfText}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      if (mergedExtra) ctx.extraInfo = mergedExtra;
+      ctx.generatedAt = new Date().toISOString().slice(0, 10);
+
+      let lastLoggedChars = 0;
+      const { html, source } = await generateModelReportHtml(ctx, (chars) => {
+        if (chars - lastLoggedChars >= 4000) {
+          lastLoggedChars = chars;
+          addLog("INFO", `AI 보고서 생성 중… ${chars.toLocaleString()}자 작성됨`);
+        }
+      });
+
+      const reportOutput = {
+        type: "ModelReportOutput" as const,
+        html,
+        generatedAt: new Date().toISOString(),
+        source,
+        context: ctx,
+      };
+
+      const finalReport: CanvasModule = {
+        ...latestReport,
+        status: ModuleStatus.Success,
+        outputData: reportOutput as any,
+      };
+
+      setModules((prev) =>
+        prev.map((m) => (m.id === reportId ? finalReport : m))
+      );
+      addLog(
+        "SUCCESS",
+        `모델 분석보고서 생성 완료 (${source === "ai" ? "AI 생성" : "결정적 폴백"}). 미리보기를 엽니다.`
+      );
+      // 미리보기 자동 오픈.
+      setViewingModelReport(finalReport);
+    } catch (error: any) {
+      const errorMessage = error?.message || String(error);
+      addLog("ERROR", `모델 분석보고서 생성 실패: ${errorMessage}`);
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
   const handleAutoLayout = () => {
     if (modules.length === 0) return;
     const arranged = autoLayoutModules(modules, connections);
@@ -11311,11 +11621,18 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
         `Project Run All started (active tab only) with ${rootNodes.length} root node(s)...`
       );
       setModules((prev) =>
-        prev.map((m) => ({
-          ...m,
-          status: ModuleStatus.Pending,
-          outputData: undefined,
-        }))
+        prev.map((m) => {
+          // 일반 사용자: '모델 분석보고서'는 전체 실행에서 건너뛰고 기존 출력 보존
+          // (생성은 고급 전용). 고급 사용자/그 외 모듈은 기존대로 초기화.
+          if (
+            !isAdvancedUnlocked &&
+            m.type === ModuleType.ModelAnalysisReport &&
+            m.outputData
+          ) {
+            return m;
+          }
+          return { ...m, status: ModuleStatus.Pending, outputData: undefined };
+        })
       );
       // Run all modules starting from all root nodes
       // Pass the first root node ID, but runAll=true will traverse all root nodes
@@ -11326,11 +11643,16 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
         "No root nodes found. Starting from all modules."
       );
       setModules((prev) =>
-        prev.map((m) => ({
-          ...m,
-          status: ModuleStatus.Pending,
-          outputData: undefined,
-        }))
+        prev.map((m) => {
+          if (
+            !isAdvancedUnlocked &&
+            m.type === ModuleType.ModelAnalysisReport &&
+            m.outputData
+          ) {
+            return m;
+          }
+          return { ...m, status: ModuleStatus.Pending, outputData: undefined };
+        })
       );
       // When no root nodes, runAll will traverse all modules
       runSimulation(modules[0].id, true);
@@ -11934,6 +12256,22 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
           >
             <span>⚖️ 모델 비교</span>
           </button>
+          {/* ✨ 모델 분석보고서 생성(고급 전용) — 종단 모델 자동연결 후 생성+미리보기 */}
+          {isAdvancedUnlocked && (
+            <button
+              onClick={handleGenerateModelReport}
+              disabled={isGeneratingReport}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md font-semibold transition-colors flex-shrink-0 text-white ${
+                isGeneratingReport
+                  ? "bg-cyan-700 opacity-70 cursor-not-allowed"
+                  : "bg-cyan-600 hover:bg-cyan-500"
+              } ${ADVANCED_BTN_DIM}`}
+              title="종단 모델을 자동 연결해 모델 분석보고서를 생성합니다(고급기능)"
+            >
+              <AdvancedLockBadge className="text-[10px] leading-none" />
+              <span>{isGeneratingReport ? "보고서 생성 중…" : "✨ 모델 분석보고서 생성"}</span>
+            </button>
+          )}
         </div>
 
         {/* 세 번째 줄: 햄버거 버튼(왼쪽) 및 AI 버튼 2개, PPT 생성, 설정 버튼(오른쪽) */}
