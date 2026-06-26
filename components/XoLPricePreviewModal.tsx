@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { CanvasModule, XoLPriceOutput } from '../types';
 import { XCircleIcon, SparklesIcon } from './icons';
-import { GoogleGenAI } from "@google/genai";
-import { getGeminiClient } from '../lib/aiClient';
+import { generateClaudeText } from '../lib/aiClient';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
 
@@ -33,7 +32,6 @@ export const XoLPricePreviewModal: React.FC<XoLPricePreviewModalProps> = ({ modu
         setIsInterpreting(true);
         setAiInterpretation(null);
         try {
-            const ai = getGeminiClient();
             const prompt = `
 You are a reinsurance expert writing a brief pricing summary for a client. Use Korean and simple Markdown.
 
@@ -50,8 +48,8 @@ You are a reinsurance expert writing a brief pricing summary for a client. Use K
 
 **지시:** 각 항목을 매우 간결하게 작성하십시오.
 `;
-            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-            setAiInterpretation(response.text);
+            const text = await generateClaudeText({ prompt });
+            setAiInterpretation(text);
         } catch (error) {
             console.error("AI interpretation failed:", error);
             setAiInterpretation("결과를 해석하는 동안 오류가 발생했습니다.");

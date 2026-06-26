@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { CanvasModule, SplitDataOutput, DataPreview } from '../types';
 import { XCircleIcon, SparklesIcon, ArrowDownTrayIcon } from './icons';
-import { GoogleGenAI } from "@google/genai";
-import { getGeminiClient } from '../lib/aiClient';
+import { generateClaudeText } from '../lib/aiClient';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
 import { SpreadViewModal } from './SpreadViewModal';
@@ -286,7 +285,6 @@ export const SplitDataPreviewModal: React.FC<{ module: CanvasModule; onClose: ()
         setIsInterpreting(true);
         setAiInterpretation(null);
         try {
-            const ai = getGeminiClient();
             const prompt = `
 You are an ML educator. Please explain the following concepts in Korean, each in a single, simple sentence. Use Markdown for formatting.
 
@@ -296,8 +294,8 @@ You are an ML educator. Please explain the following concepts in Korean, each in
 *   **세트 비교:** 두 데이터 세트의 통계가 유사해 보이는 것이 왜 중요합니까?
 *   **다음 단계:** 이 분할된 데이터로 다음에는 무엇을 하게 됩니까?
 `;
-            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-            setAiInterpretation(response.text);
+            const text = await generateClaudeText({ prompt });
+            setAiInterpretation(text);
         } catch (error) {
             console.error("AI interpretation failed:", error);
             setAiInterpretation("결과를 해석하는 동안 오류가 발생했습니다.");

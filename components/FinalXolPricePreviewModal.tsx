@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { CanvasModule, FinalXolPriceOutput } from '../types';
 import { XCircleIcon, SparklesIcon } from './icons';
-import { GoogleGenAI } from "@google/genai";
-import { getGeminiClient } from '../lib/aiClient';
+import { generateClaudeText } from '../lib/aiClient';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
 
@@ -33,7 +32,6 @@ export const FinalXolPricePreviewModal: React.FC<FinalXolPricePreviewModalProps>
         setIsInterpreting(true);
         setAiInterpretation(null);
         try {
-            const ai = getGeminiClient();
             const prompt = `
 You are a senior actuary creating a concise premium breakdown report. Use Korean and simple Markdown.
 
@@ -47,8 +45,8 @@ You are a senior actuary creating a concise premium breakdown report. Use Korean
 
 **지시:** 위의 형식과 같이 각 항목의 역할을 한 문장으로 요약하여 보고서를 완성해 주십시오. 이미 제공된 텍스트를 기반으로 간결하게 다듬어주세요.
 `;
-            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-            setAiInterpretation(response.text);
+            const text = await generateClaudeText({ prompt });
+            setAiInterpretation(text);
         } catch (error) {
             console.error("AI interpretation failed:", error);
             setAiInterpretation("결과를 해석하는 동안 오류가 발생했습니다.");

@@ -85,7 +85,7 @@ export const HypothesisTestingPreviewModal: React.FC<HypothesisTestingPreviewMod
             setExplanation(result);
         } catch (err) {
             if (err instanceof ApiKeyMissingError) {
-                setAiError('Gemini API 키가 필요합니다. 설정(⚙)에서 키를 입력한 뒤 다시 시도하세요.');
+                setAiError('Claude API 키가 필요합니다. 설정(⚙)에서 키를 입력한 뒤 다시 시도하세요.');
             } else {
                 setAiError(`AI 해설 생성 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`);
             }

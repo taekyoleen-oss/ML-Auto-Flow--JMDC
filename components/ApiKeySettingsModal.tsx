@@ -12,10 +12,10 @@ function maskKey(key: string): string {
   return `${key.slice(0, 4)}${'•'.repeat(Math.max(4, key.length - 8))}${key.slice(-4)}`;
 }
 
-/** Gemini 키 형식의 간단 검증. 보통 'AIza'로 시작하고 길이 ~39. (차단이 아니라 안내용) */
+/** Claude 키 형식의 간단 검증. 보통 'sk-ant-'로 시작. (차단이 아니라 안내용) */
 function looksLikeValidKey(key: string): boolean {
   const k = key.trim();
-  return k.startsWith('AIza') && k.length >= 35 && k.length <= 45;
+  return k.startsWith('sk-ant-') && k.length >= 40;
 }
 
 export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({ onClose }) => {
@@ -82,7 +82,7 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({ onClos
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-          <h2 className="text-sm font-bold text-gray-900 dark:text-white">AI 설정 · Gemini API 키</h2>
+          <h2 className="text-sm font-bold text-gray-900 dark:text-white">AI 설정 · Claude API 키</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors text-xl leading-none"
@@ -94,7 +94,7 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({ onClos
         {/* Body */}
         <div className="overflow-y-auto flex-1 p-5 space-y-4">
           <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-            AI 기능(모듈 추천, 파이프라인 생성, 결과 해설 등)은 본인의 <b>Google Gemini API 키</b>로 동작합니다.
+            AI 기능(모듈 추천, 파이프라인 생성, 결과 해설 등)은 본인의 <b>Anthropic Claude API 키</b>로 동작합니다.
             키는 이 브라우저의 <b>localStorage에만 저장</b>되며 서버로 전송되지 않습니다.
           </p>
 
@@ -121,7 +121,7 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({ onClos
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
-                placeholder="AIza... 로 시작하는 Gemini API 키"
+                placeholder="sk-ant-... 로 시작하는 Claude API 키"
                 className="flex-1 px-3 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <button
@@ -136,7 +136,7 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({ onClos
           {/* 형식 경고 (차단하지 않고 안내만) */}
           {showFormatWarning && (
             <p className="text-[11px] text-amber-600 dark:text-amber-400">
-              ⚠ 일반적인 Gemini 키 형식과 다릅니다(보통 <span className="font-mono">AIza</span>로 시작, 약 39자). 그래도 저장은 가능합니다.
+              ⚠ 일반적인 Claude 키 형식과 다릅니다(보통 <span className="font-mono">sk-ant-</span>로 시작). 그래도 저장은 가능합니다.
             </p>
           )}
 
@@ -153,7 +153,7 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({ onClos
               onClick={handleTest}
               disabled={testing || !canTest}
               className="px-4 py-2 text-xs font-semibold rounded-lg border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              title="입력값(없으면 저장된 키)으로 Gemini 연결을 1회 시도합니다"
+              title="입력값(없으면 저장된 키)으로 Claude 연결을 1회 시도합니다"
             >
               {testing ? '테스트 중…' : '연결 테스트'}
             </button>
@@ -186,14 +186,14 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({ onClos
             <p className="text-[11px] text-blue-700 dark:text-blue-300 leading-relaxed">
               키 발급:{' '}
               <a
-                href="https://aistudio.google.com/app/apikey"
+                href="https://console.anthropic.com/settings/keys"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline font-semibold"
               >
-                Google AI Studio → Get API key
+                Anthropic Console → API keys
               </a>
-              에서 무료로 발급받을 수 있습니다.
+              에서 발급받을 수 있습니다.
             </p>
           </div>
         </div>

@@ -22,7 +22,6 @@ import {
   SparklesIcon,
   ArrowDownTrayIcon,
 } from "./icons";
-import { GoogleGenAI } from "@google/genai";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { SpreadViewModal } from "./SpreadViewModal";
 import { DataOverviewPanel } from "./DataOverviewPanel";

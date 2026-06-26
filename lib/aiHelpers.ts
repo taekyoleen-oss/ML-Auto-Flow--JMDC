@@ -1,19 +1,30 @@
 // 재사용 가능한 AI 헬퍼 레이어.
-// 모든 함수는 중앙 클라이언트(getGeminiClient)를 사용하므로, 키 관리/폴백/에러 처리가 한 곳에서 일관되게 동작한다.
-// AI 기능을 새로 붙일 때는 새 호출부에서 new GoogleGenAI를 만들지 말고 이 헬퍼를 재사용한다.
+// 모든 함수는 중앙 클라이언트(getClaudeClient)를 사용하므로, 키 관리/폴백/에러 처리가 한 곳에서 일관되게 동작한다.
+// AI 기능을 새로 붙일 때는 새 호출부에서 new Anthropic을 만들지 말고 이 헬퍼를 재사용한다.
 
-import { getGeminiClient, hasApiKey } from "./aiClient";
+import { getClaudeClient, hasApiKey, extractText, CLAUDE_FAST, CLAUDE_CAPABLE } from "./aiClient";
 import { ReportContext } from "../types";
 import { buildModelReportHtmlFallback } from "../utils/modelReport";
 
-/** 빠른 응답용 기본 모델. 무거운 추론이 필요하면 gemini-2.5-pro로 교체 가능. */
-export const DEFAULT_AI_MODEL = "gemini-2.5-flash";
+/** 빠른 응답용 기본 모델. 무거운 추론이 필요하면 CLAUDE_CAPABLE로 교체 가능. */
+export const DEFAULT_AI_MODEL = CLAUDE_FAST;
 
-/** 프롬프트 1건을 보내고 텍스트 응답을 받는다(공통 래퍼). */
-export async function runPrompt(prompt: string, model: string = DEFAULT_AI_MODEL): Promise<string> {
-  const ai = getGeminiClient(); // 키 없으면 ApiKeyMissingError + 설정 모달 자동 오픈
-  const response = await ai.models.generateContent({ model, contents: prompt });
-  return (response.text || "").trim();
+/**
+ * 프롬프트 1건을 보내고 텍스트 응답을 받는다(공통 래퍼).
+ * max_tokens 기본은 보조 작업용 8192. 보고서/추천 등 긴 출력은 호출부에서 16000을 넘긴다.
+ */
+export async function runPrompt(
+  prompt: string,
+  model: string = DEFAULT_AI_MODEL,
+  maxTokens: number = 8192
+): Promise<string> {
+  const client = getClaudeClient(); // 키 없으면 ApiKeyMissingError + 설정 모달 자동 오픈
+  const resp = await client.messages.create({
+    model,
+    max_tokens: maxTokens,
+    messages: [{ role: "user", content: prompt }],
+  });
+  return extractText(resp);
 }
 
 /**
@@ -24,11 +35,16 @@ export async function* streamPrompt(
   prompt: string,
   model: string = DEFAULT_AI_MODEL
 ): AsyncGenerator<string> {
-  const ai = getGeminiClient(); // 키 없으면 ApiKeyMissingError + 설정 모달 자동 오픈
-  const stream = await ai.models.generateContentStream({ model, contents: prompt });
-  for await (const chunk of stream) {
-    const text = chunk.text;
-    if (text) yield text;
+  const client = getClaudeClient(); // 키 없으면 ApiKeyMissingError + 설정 모달 자동 오픈
+  const stream = client.messages.stream({
+    model,
+    max_tokens: 8192,
+    messages: [{ role: "user", content: prompt }],
+  });
+  for await (const ev of stream) {
+    if (ev.type === "content_block_delta" && (ev as any).delta?.type === "text_delta") {
+      yield (ev as any).delta.text;
+    }
   }
 }
 
@@ -144,25 +160,12 @@ ${
 }`;
 }
 
-/** 429/rate-limit/quota 류 일시적 한도 에러인지 메시지 기반 판별. */
-function isRateLimitError(err: unknown): boolean {
-  const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
-  return (
-    m.includes("429") ||
-    m.includes("resource_exhausted") ||
-    m.includes("rate limit") ||
-    m.includes("rate-limit") ||
-    m.includes("too many requests") ||
-    m.includes("quota")
-  );
-}
-
 /**
  * 모델 분석보고서 HTML을 생성한다.
  * - API 키가 없으면 모달을 띄우지 않고 결정적 폴백 HTML을 반환한다(일반 사용자도 결과 열람 가능).
- * - flash-first로 생성하며, flash가 429(무료티어 RPM/RPD)면 짧은 백오프 후 1회 재시도한다.
- *   그래도 실패하면 pro(유료 키 환경) 시도, 최종 실패 시 결정적 폴백으로 graceful degradation.
+ * - CLAUDE_CAPABLE(생성·추론 티어) 단일 호출로 생성한다. 일시적 429는 SDK가 자동 재시도한다(max_retries).
  * - AI 출력은 자기완결·안전(<html> 포함·<script> 없음) 검증을 통과해야 채택된다.
+ * - 어떤 실패든 결정적 폴백으로 graceful degradation.
  */
 export async function generateModelReportHtml(
   ctx: ReportContext
@@ -171,30 +174,15 @@ export async function generateModelReportHtml(
     return { html: buildModelReportHtmlFallback(ctx), source: "fallback" };
   }
   const prompt = buildModelReportPrompt(ctx);
-  // flash-first: 무료티어 키는 gemini-2.5-pro 할당량이 0(429)이므로 flash를 먼저 시도한다.
-  const models = [DEFAULT_AI_MODEL, "gemini-2.5-pro"];
-  for (const model of models) {
-    // flash는 무료티어 RPM 한도로 일시적 429가 잦으므로 1회 백오프 재시도.
-    // pro는 무료티어에서 구조적 429(limit:0)라 재시도가 무의미하므로 1회만 시도한다.
-    const maxAttempts = model === DEFAULT_AI_MODEL ? 2 : 1;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const raw = await runPrompt(prompt, model);
-        const html = stripHtmlFence(raw);
-        if (isValidReportHtml(html)) {
-          return { html, source: "ai" };
-        }
-        break; // 응답은 받았으나 HTML이 유효하지 않음 → 같은 모델 재시도 불필요, 다음 모델로
-      } catch (err) {
-        if (isRateLimitError(err) && attempt < maxAttempts) {
-          console.warn(`[generateModelReportHtml] ${model} 429 — ${attempt}차, 15초 백오프 후 재시도`);
-          await new Promise((resolve) => setTimeout(resolve, 15000));
-          continue;
-        }
-        console.warn(`[generateModelReportHtml] ${model} 실패:`, err);
-        break; // 비-429 또는 재시도 소진 → 다음 모델
-      }
+  try {
+    // CLAUDE_CAPABLE 단일 호출. max_tokens는 보고서/추천용 상향(16000).
+    const raw = await runPrompt(prompt, CLAUDE_CAPABLE, 16000);
+    const html = stripHtmlFence(raw);
+    if (isValidReportHtml(html)) {
+      return { html, source: "ai" };
     }
+  } catch (err) {
+    console.warn("[generateModelReportHtml] AI 생성 실패, 결정적 폴백 사용:", err);
   }
   return { html: buildModelReportHtmlFallback(ctx), source: "fallback" };
 }

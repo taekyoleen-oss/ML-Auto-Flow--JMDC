@@ -8,9 +8,9 @@ export default defineConfig(({ mode }) => {
     const isProduction = mode === 'production';
     
     // API 키 확인 (디버깅용)
-    const apiKey = env.GEMINI_API_KEY || env.API_KEY;
+    const apiKey = env.ANTHROPIC_API_KEY || env.API_KEY;
     if (!apiKey && mode === 'development') {
-      console.warn('⚠️  GEMINI_API_KEY가 설정되지 않았습니다. .env.local 파일에 GEMINI_API_KEY를 설정해주세요.');
+      console.warn('⚠️  ANTHROPIC_API_KEY가 설정되지 않았습니다. .env.local 파일에 ANTHROPIC_API_KEY를 설정해주세요.');
     }
     
     return {
@@ -44,8 +44,8 @@ export default defineConfig(({ mode }) => {
         // 보안: 프로덕션 빌드 번들에는 키를 박지 않는다(빈 문자열).
         // 개발 모드에서만 .env/.env.local의 키를 dev 폴백으로 주입한다.
         // 사용자 키는 런타임에 localStorage에서 로드된다(lib/aiClient.ts).
-        'process.env.API_KEY': JSON.stringify(isProduction ? '' : (env.GEMINI_API_KEY || env.API_KEY || '')),
-        'process.env.GEMINI_API_KEY': JSON.stringify(isProduction ? '' : (env.GEMINI_API_KEY || env.API_KEY || '')),
+        'process.env.API_KEY': JSON.stringify(isProduction ? '' : (env.ANTHROPIC_API_KEY || env.API_KEY || '')),
+        'process.env.ANTHROPIC_API_KEY': JSON.stringify(isProduction ? '' : (env.ANTHROPIC_API_KEY || env.API_KEY || '')),
         // 고급기능 비밀번호 검증값(비밀번호의 SHA-256 hex 권장, 평문도 허용되나 번들 노출).
         // Vercel/로컬 환경변수에서 빌드 시 주입. 변수명: ADVANCED_PASSWORD_HASH
         // 또는 VITE_ADVANCED_PASSWORD_HASH / NEXT_PUBLIC_ADVANCED_PASSWORD_HASH 모두 허용.
@@ -76,8 +76,8 @@ export default defineConfig(({ mode }) => {
               'vendor-react': ['react', 'react-dom'],
               // Supabase — large, rarely changes
               'vendor-supabase': ['@supabase/supabase-js'],
-              // Google AI SDK
-              'vendor-ai': ['@google/genai'],
+              // Anthropic Claude SDK
+              'vendor-ai': ['@anthropic-ai/sdk'],
               // xlsx — already auto-split but make it explicit
               'vendor-xlsx': ['xlsx'],
             },

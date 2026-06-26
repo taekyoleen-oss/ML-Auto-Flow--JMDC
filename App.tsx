@@ -126,8 +126,7 @@ import { PipelineCodePanel } from "./components/PipelineCodePanel";
 import { ErrorModal } from "./components/ErrorModal";
 import SamplesModal from "./components/SamplesModal";
 import { SamplesManagementModal } from "./components/SamplesManagementModal";
-import { GoogleGenAI, Type } from "@google/genai";
-import { getGeminiClient, OPEN_API_KEY_SETTINGS_EVENT } from './lib/aiClient';
+import { getClaudeClient, extractText, CLAUDE_CAPABLE, OPEN_API_KEY_SETTINGS_EVENT } from './lib/aiClient';
 import { ApiKeySettingsModal } from "./components/ApiKeySettingsModal";
 import { AdvancedUnlockModal } from "./components/AdvancedUnlockModal";
 import { useAdvancedFeature, ADVANCED_BTN_DIM, AdvancedLockBadge } from "./contexts/AdvancedFeatureContext";
@@ -562,7 +561,7 @@ const App: React.FC = () => {
         `AI is suggesting a module to connect to '${fromModule.name}'...`
       );
       try {
-        const ai = getGeminiClient();
+        const ai = getClaudeClient();
         const fromPort = fromModule.outputs.find(
           (p) => p.name === fromPortName
         );
@@ -576,12 +575,13 @@ const App: React.FC = () => {
 Available module types: [${availableModuleTypes}].
 Respond with ONLY the module type string, for example: 'ScoreModel'`;
 
-        const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: prompt,
+        const response = await ai.messages.create({
+          model: CLAUDE_CAPABLE,
+          max_tokens: 16000,
+          messages: [{ role: "user", content: prompt }],
         });
 
-        const suggestedType = response.text.trim() as ModuleType;
+        const suggestedType = extractText(response) as ModuleType;
         const defaultModule = DEFAULT_MODULES.find(
           (m) => m.type === suggestedType
         );
@@ -1506,7 +1506,7 @@ Respond with ONLY the module type string, for example: 'ScoreModel'`;
     addLog("INFO", "AI pipeline generation started...");
     try {
       // API 키 확인
-      const ai = getGeminiClient();
+      const ai = getClaudeClient();
 
       const moduleDescriptions: Record<string, string> = {
         LoadData: "Loads a dataset from a user-provided CSV file.",
@@ -1670,51 +1670,18 @@ The JSON object must contain 'plan', 'modules', and 'connections'.
 - \`connections\`: An array of connection objects.
 `;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-pro",
-        contents: fullPrompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              plan: { type: Type.STRING },
-              modules: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    type: { type: Type.STRING },
-                    name: { type: Type.STRING },
-                  },
-                  required: ["type", "name"],
-                },
-              },
-              connections: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    fromModuleIndex: { type: Type.INTEGER },
-                    fromPort: { type: Type.STRING },
-                    toModuleIndex: { type: Type.INTEGER },
-                    toPort: { type: Type.STRING },
-                  },
-                  required: [
-                    "fromModuleIndex",
-                    "fromPort",
-                    "toModuleIndex",
-                    "toPort",
-                  ],
-                },
-              },
-            },
-            required: ["plan", "modules", "connections"],
-          },
-        },
+      // Claude는 Gemini responseSchema 대신 "오직 JSON으로 답하라" 프롬프트로 구조화 출력을 유도한다.
+      // 위 fullPrompt 7번 지시("Respond ONLY with a single, valid JSON object...")가 이미 JSON-only를 명시.
+      const response = await ai.messages.create({
+        model: CLAUDE_CAPABLE,
+        max_tokens: 16000,
+        messages: [{ role: "user", content: fullPrompt }],
       });
 
-      const responseText = response.text.trim();
+      // 코드펜스(```json …```)가 섞여 오면 제거하고 JSON 본문만 파싱.
+      let responseText = extractText(response);
+      const fence = responseText.match(/```(?:json)?\s*([\s\S]*?)```/i);
+      if (fence && fence[1]) responseText = fence[1].trim();
       const pipeline = JSON.parse(responseText);
 
       if (!pipeline.modules || !pipeline.connections || !pipeline.plan) {
@@ -11878,7 +11845,7 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
           <button
             onClick={() => setIsApiKeyModalOpen(true)}
             className={`flex items-center gap-0.5 p-1.5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors flex-shrink-0 text-sm ${ADVANCED_BTN_DIM}`}
-            title="AI 설정 (Gemini API 키) (고급기능)"
+            title="AI 설정 (Claude API 키) (고급기능)"
           >
             <AdvancedLockBadge className="text-[10px] leading-none" />
             ⚙
@@ -13029,7 +12996,7 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
         <ShortcutsModal onClose={() => setShowShortcuts(false)} />
       )}
 
-      {/* AI 설정 (Gemini API 키) 모달 */}
+      {/* AI 설정 (Claude API 키) 모달 */}
       {isApiKeyModalOpen && (
         <ApiKeySettingsModal onClose={() => setIsApiKeyModalOpen(false)} />
       )}

@@ -602,7 +602,7 @@ export function buildModelReportHtmlFallback(ctx: ReportContext): string {
         ? `<li>전체 컬럼 중 일부만 특성으로 사용했습니다. 미사용 변수 인코딩·추가로 성능 개선 여지가 있습니다.</li>`
         : ""
     }
-    <li>더 풍부한 해설(도메인 배경·개선 제안)은 상단 설정에서 Gemini API 키를 입력하면 AI 생성 보고서로 보강됩니다.</li>
+    <li>더 풍부한 해설(도메인 배경·개선 제안)은 상단 설정에서 Claude API 키를 입력하면 AI 생성 보고서로 보강됩니다.</li>
   </ul>
   ${extra}
 

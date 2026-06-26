@@ -77,7 +77,7 @@ export const ModelReportPreviewModal: React.FC<
                 }`}
                 title={
                   isAi
-                    ? "Gemini AI가 생성한 보고서"
+                    ? "Claude AI가 생성한 보고서"
                     : "API 키 미설정/실패 시 메타데이터 기반 결정적 폴백 보고서"
                 }
               >

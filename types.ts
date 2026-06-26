@@ -531,7 +531,7 @@ export interface MortalityResultOutput {
 }
 
 // --- Model Analysis Report (documentation / meta module) ---
-// 파이프라인 말단에 두는 문서화 모듈. AI(Gemini) 또는 결정적 폴백으로 자기완결 HTML 보고서를
+// 파이프라인 말단에 두는 문서화 모듈. AI(Claude) 또는 결정적 폴백으로 자기완결 HTML 보고서를
 // 만들어 모듈 결과로 저장한다. 데이터 분석이 아니므로 export/verify 대상이 아니다.
 export interface ReportContext {
   modelType?: string; // 예: "이진 분류", "회귀", "군집(KMeans)"

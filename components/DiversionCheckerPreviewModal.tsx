@@ -1,8 +1,7 @@
 import React, { useState } from "react";
 import { CanvasModule, DiversionCheckerOutput } from "../types";
 import { XCircleIcon, SparklesIcon } from "./icons";
-import { GoogleGenAI } from "@google/genai";
-import { getGeminiClient } from '../lib/aiClient';
+import { generateClaudeText } from '../lib/aiClient';
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
 
@@ -38,8 +37,6 @@ export const DiversionCheckerPreviewModal: React.FC<
     setIsInterpreting(true);
     setAiInterpretation(null);
     try {
-      const ai = getGeminiClient();
-
       const prompt = `
 You are a statistician writing a brief report for a non-technical audience. Please use Korean and simple Markdown.
 
@@ -89,12 +86,9 @@ ${aicComparison ? `- AIC 비교: ${aicComparison}` : ""}
 
 **지시:** 각 항목을 한두 문장으로 매우 간결하게 작성하십시오.
 `;
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-      });
+      const text = await generateClaudeText({ prompt });
 
-      setAiInterpretation(response.text);
+      setAiInterpretation(text);
     } catch (error) {
       console.error("AI interpretation failed:", error);
       setAiInterpretation(

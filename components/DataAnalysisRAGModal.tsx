@@ -9,8 +9,7 @@ import {
   CheckIcon
 } from '@heroicons/react/24/outline';
 import { CanvasModule } from '../types';
-import { GoogleGenAI } from '@google/genai';
-import { getGeminiClient } from '../lib/aiClient';
+import { generateClaudeText } from '../lib/aiClient';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -84,9 +83,6 @@ export const DataAnalysisRAGModal: React.FC<DataAnalysisRAGModalProps> = ({
     setMessages([userMessage]);
 
     try {
-      // Gemini API 직접 호출
-      const genAI = getGeminiClient();
-      
       // 데이터 정보를 포함한 프롬프트 구성
       const prompt = `당신은 데이터 분석 전문가입니다. 다음 데이터 정보를 바탕으로 질문에 답변해주세요.
 
@@ -106,12 +102,7 @@ ${question}
 4. 이 앱의 모듈을 사용해서 분석 예시를 보여주세요. 예를 들어 "Load Data → Select Data → Statistics → ..." 같은 순서도를 제시하세요.
 5. 전처리(공백 처리, 정규화, 결측치 처리 등)에 대한 구체적인 제안도 포함해주세요.`;
 
-      const result = await genAI.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-      });
-
-      const answer = result.text;
+      const answer = await generateClaudeText({ prompt });
 
       const assistantMessage: Message = {
         role: 'assistant',
@@ -146,12 +137,9 @@ ${question}
     try {
       const dataInfo = getDataInfo();
 
-      // Gemini API 직접 호출
-      const genAI = getGeminiClient();
-      
       // 데이터 정보를 포함한 프롬프트 구성
       let prompt = currentInput;
-      
+
       if (dataInfo) {
         prompt = `당신은 데이터 분석 전문가입니다. 다음 데이터 정보를 바탕으로 질문에 답변해주세요.
 
@@ -172,12 +160,7 @@ ${currentInput}
 5. 전처리(공백 처리, 정규화, 결측치 처리 등)에 대한 구체적인 제안도 포함해주세요.`;
       }
 
-      const result = await genAI.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-      });
-
-      const answer = result.text;
+      const answer = await generateClaudeText({ prompt });
 
       const assistantMessage: Message = {
         role: 'assistant',

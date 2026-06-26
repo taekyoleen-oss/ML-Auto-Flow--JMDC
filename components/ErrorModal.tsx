@@ -49,7 +49,7 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({ error, onClose }) => {
     } catch (err) {
       if (err instanceof ApiKeyMissingError) {
         // 설정 모달은 자동으로 열린다. 패널에는 간단 안내만 표시.
-        setAiError('Gemini API 키가 필요합니다. 설정(⚙)에서 키를 입력한 뒤 다시 시도하세요.');
+        setAiError('Claude API 키가 필요합니다. 설정(⚙)에서 키를 입력한 뒤 다시 시도하세요.');
       } else {
         setAiError(`AI 원인 분석 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`);
       }

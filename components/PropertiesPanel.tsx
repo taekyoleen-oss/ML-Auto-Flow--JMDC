@@ -38,14 +38,21 @@ import {
 import { getModuleCode } from "../codeSnippets";
 import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge, useAdvancedFeature } from "../contexts/AdvancedFeatureContext";
 // Examples_in_Load 디렉토리에서 예제 데이터를 로드하는 함수는 아래에서 정의
-import { GoogleGenAI, Type } from "@google/genai";
-import { getGeminiClient } from '../lib/aiClient';
+import { generateClaudeText, CLAUDE_CAPABLE } from '../lib/aiClient';
 import { DEFAULT_MODULES } from "../constants";
 import { ExcelInputModal } from "./ExcelInputModal";
 import { DataAnalysisRAGModal } from "./DataAnalysisRAGModal";
 import { ModuleDescriptionModal } from "./ModuleDescriptionModal";
 import { useTheme } from "../contexts/ThemeContext";
 import { cacheFileContent, listCachedFiles, getCachedFileContent } from "../utils/fileContentCache";
+
+/** Claude 응답에서 코드펜스(```json …``` 또는 ``` …```)를 제거하고 JSON 본문만 남긴다. */
+function stripJsonFence(text: string): string {
+  let t = (text || "").trim();
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence && fence[1]) t = fence[1].trim();
+  return t;
+}
 
 // Dynamic import for xlsx to handle module resolution issues
 let XLSX: any = null;
@@ -194,8 +201,6 @@ const AIModuleExplanation: React.FC<{ module: CanvasModule }> = ({
     setIsLoading(true);
     setShow(true);
     try {
-      const ai = getGeminiClient();
-
       const defaultModuleData = DEFAULT_MODULES.find(
         (m) => m.type === module.type
       );
@@ -258,11 +263,8 @@ ${optionsContext}
 전체적으로 초보자도 이해하기 쉽게, 간결하면서도 정보를 충분히 담아 작성해 주세요.
 `;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-      });
-      setExplanation(response.text);
+      const text = await generateClaudeText({ prompt });
+      setExplanation(text);
     } catch (error) {
       console.error("AI explanation failed:", error);
       setExplanation("설명을 생성하는 데 실패했습니다.");
@@ -313,8 +315,6 @@ const AIParameterRecommender: React.FC<{
   const handleRecommend = async () => {
     setIsLoading(true);
     try {
-      const ai = getGeminiClient();
-
       const prompt = `
 You are an expert data scientist AI assistant. Your task is to recommend the optimal feature columns and a single label/target column for a machine learning model based on a project goal and a list of available data columns.
 
@@ -328,30 +328,13 @@ You are an expert data scientist AI assistant. Your task is to recommend the opt
 1.  Analyze the project goal and column names to infer the prediction target.
 2.  Identify the column that is most likely the **label column** (the variable to be predicted).
 3.  Select a set of columns that would be good **feature columns** (input variables for the model). Exclude the label column and any columns that seem irrelevant or are identifiers.
-4.  Provide your response *only* in a valid JSON format. The JSON object must contain two keys:
+4.  Respond with ONLY a single valid JSON object — no markdown, no code fences, no explanation. The JSON object must contain exactly two keys:
     - \`label_column\`: A string with the name of the single recommended label column.
     - \`feature_columns\`: An array of strings with the names of the recommended feature columns.
 `;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              feature_columns: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING },
-              },
-              label_column: { type: Type.STRING },
-            },
-          },
-        },
-      });
-
-      const resultJson = JSON.parse(response.text);
+      const raw = await generateClaudeText({ prompt, model: CLAUDE_CAPABLE, maxTokens: 16000 });
+      const resultJson = JSON.parse(stripJsonFence(raw));
 
       if (resultJson.feature_columns && resultJson.label_column) {
         const validFeatures = resultJson.feature_columns.filter((col: string) =>

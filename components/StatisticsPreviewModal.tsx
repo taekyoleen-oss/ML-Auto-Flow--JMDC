@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { CanvasModule, StatisticsOutput } from '../types';
 import { XCircleIcon, SparklesIcon, ArrowDownTrayIcon } from './icons';
-import { GoogleGenAI } from "@google/genai";
-import { getGeminiClient, ApiKeyMissingError } from '../lib/aiClient';
+import { generateClaudeText, ApiKeyMissingError } from '../lib/aiClient';
 import { explainModuleResult } from '../lib/aiHelpers';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
@@ -305,9 +304,7 @@ export const StatisticsPreviewModal: React.FC<StatisticsPreviewModalProps> = ({ 
         setIsInterpreting(true);
         setAiInterpretation(null);
         try {
-            const ai = getGeminiClient();
-
-            const statsText = Object.entries(stats).map(([col, data]) => 
+            const statsText = Object.entries(stats).map(([col, data]) =>
                 `- ${col}: Mean=${data.mean?.toFixed(2)}, StdDev=${data.std?.toFixed(2)}, Min=${data.min?.toFixed(2)}, Max=${data.max?.toFixed(2)}`
             ).join('\n');
 
@@ -344,8 +341,8 @@ ${correlationText}
 
 **지시:** 각 항목을 한두 문장으로 매우 간결하게 작성하십시오.
 `;
-            const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-            setAiInterpretation(response.text);
+            const text = await generateClaudeText({ prompt });
+            setAiInterpretation(text);
         } catch (error) {
             console.error("AI interpretation failed:", error);
             setAiInterpretation("결과를 해석하는 동안 오류가 발생했습니다.");
@@ -380,7 +377,7 @@ ${correlationText}
             setExplanation(result);
         } catch (err) {
             if (err instanceof ApiKeyMissingError) {
-                setAiError('Gemini API 키가 필요합니다. 설정(⚙)에서 키를 입력한 뒤 다시 시도하세요.');
+                setAiError('Claude API 키가 필요합니다. 설정(⚙)에서 키를 입력한 뒤 다시 시도하세요.');
             } else {
                 setAiError(`AI 해설 생성 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`);
             }

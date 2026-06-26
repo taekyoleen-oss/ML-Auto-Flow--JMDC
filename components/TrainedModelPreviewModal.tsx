@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CanvasModule, TrainedModelOutput, ModuleType } from '../types';
 import { XCircleIcon, SparklesIcon } from './icons';
-import { GoogleGenAI } from "@google/genai";
-import { getGeminiClient } from '../lib/aiClient';
+import { generateClaudeText } from '../lib/aiClient';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
 
@@ -392,8 +391,6 @@ export const TrainedModelPreviewModal: React.FC<TrainedModelPreviewModalProps> =
         setIsInterpreting(true);
         setAiInterpretation(null);
         try {
-            const ai = getGeminiClient();
-
             const metricsText = Object.entries(metrics).map(([key, value]) => `- ${key}: ${typeof value === 'number' ? value.toFixed(4) : value}`).join('\n');
             const topFeatures = Object.entries(coefficients)
                 .sort(([, a], [, b]) => Math.abs(b) - Math.abs(a))
@@ -429,12 +426,9 @@ ${topFeatures}
 
 **지시:** 각 항목을 한두 문장으로 매우 간결하게 작성하십시오.
 `;
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: prompt,
-            });
+            const text = await generateClaudeText({ prompt });
 
-            setAiInterpretation(response.text);
+            setAiInterpretation(text);
         } catch (error) {
             console.error("AI interpretation failed:", error);
             setAiInterpretation("결과를 해석하는 동안 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
