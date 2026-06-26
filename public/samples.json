@@ -285,6 +285,21 @@
             "cv_folds": 5,
             "scoring_metric": "neg_mean_squared_error"
           }
+        },
+        {
+          "type": "ModelAnalysisReport",
+          "name": "모델 분석보고서",
+          "parameters": {
+            "title": "선형회귀 모델 분석보고서",
+            "extra_info": "데이터: 선형회귀 예제(결측치 처리·스케일링 전처리 포함). 모델: 선형회귀. EvaluateModel 출력을 report_in_eval에 연결하면 전처리·회귀 지표·개발 과정을 HTML 보고서로 생성한다(고급 사용자 실행, 키 없으면 결정적 폴백).",
+            "extra_pdf_text": "",
+            "extra_pdf_name": "",
+            "use_web_research": true
+          },
+          "position": {
+            "x": 1946,
+            "y": 320
+          }
         }
       ],
       "connections": [
@@ -335,6 +350,12 @@
           "fromPort": "model_out",
           "toModuleIndex": 4,
           "toPort": "model_in"
+        },
+        {
+          "fromModuleIndex": 6,
+          "fromPort": "evaluation_out",
+          "toModuleIndex": 8,
+          "toPort": "report_in_eval"
         }
       ]
     }
@@ -2731,6 +2752,21 @@
             "cv_folds": 5,
             "scoring_metric": "neg_mean_squared_error"
           }
+        },
+        {
+          "type": "ModelAnalysisReport",
+          "name": "모델 분석보고서",
+          "parameters": {
+            "title": "Boston Housing 선형회귀 모델 분석보고서",
+            "extra_info": "데이터: Boston Housing(주택가격 회귀, EDA·VIF 포함). 모델: 선형회귀. 파이프라인 끝 EvaluateModel 출력을 report_in_eval에 연결하면 회귀 지표(MSE/RMSE/MAE/R²)·개발 과정을 HTML 보고서로 생성한다(고급 사용자 실행, 키 없으면 결정적 폴백).",
+            "extra_pdf_text": "",
+            "extra_pdf_name": "",
+            "use_web_research": true
+          },
+          "position": {
+            "x": 1949,
+            "y": 320
+          }
         }
       ],
       "connections": [
@@ -2811,6 +2847,12 @@
           "fromPort": "model_out",
           "toModuleIndex": 3,
           "toPort": "model_in"
+        },
+        {
+          "fromModuleIndex": 5,
+          "fromPort": "evaluation_out",
+          "toModuleIndex": 13,
+          "toPort": "report_in_eval"
         }
       ]
     }
