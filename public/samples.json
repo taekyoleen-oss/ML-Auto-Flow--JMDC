@@ -2481,6 +2481,158 @@
             "x": 880,
             "y": 300
           }
+        },
+        {
+          "type": "ModelAnalysisReport",
+          "name": "모델 분석보고서",
+          "parameters": {
+            "title": "JMDC 외래 수요예측 모델 분석보고서",
+            "extra_info": "데이터: JMDC 합성 월별 외래 이용(jmdc_monthly_utilization.csv, 730일). 타깃: visits(일별 외래 방문수). 특성: day_idx·year·month·dow·is_weekend·is_flu_season·temp·enrollees. 모델: RandomForest 회귀 + FeatureEngineer(순환·상호작용 파생). 파이프라인 끝 EvaluateModel 출력을 report_in_eval에 연결해 수요예측 모델의 개발 과정·성능지표·해석을 HTML 보고서로 생성한다(고급 사용자 실행, 키 없으면 결정적 폴백).",
+            "extra_pdf_text": "",
+            "extra_pdf_name": "",
+            "use_web_research": true
+          },
+          "position": {
+            "x": 1160,
+            "y": 300
+          },
+          "outputData": {
+            "type": "ModelReportOutput",
+            "html": "<!DOCTYPE html>\n<html lang=\"ko\">\n<head>\n<meta charset=\"UTF-8\" />\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n<title>JMDC 외래 수요예측 모델 분석보고서</title>\n<style>\n  :root { --ink:#1e293b; --muted:#64748b; --line:#e2e8f0; --accent:#0891b2;\n    --accent-soft:#ecfeff; --th:#f8fafc; --good:#16a34a; --warn:#d97706; --bad:#dc2626; --code-bg:#f1f5f9; }\n  * { box-sizing: border-box; }\n  body { margin:0; background:#f1f5f9; color:var(--ink); line-height:1.65; font-size:15px;\n    font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"Noto Sans KR\",Roboto,sans-serif; }\n  .report { max-width:880px; margin:32px auto; background:#fff; border:1px solid var(--line);\n    border-radius:12px; padding:56px 64px; box-shadow:0 1px 3px rgba(15,23,42,.06); }\n  .cover { border-bottom:2px solid var(--ink); padding-bottom:22px; margin-bottom:32px; }\n  .cover h1 { font-size:30px; line-height:1.25; margin:0 0 10px; letter-spacing:-.01em; }\n  .cover .sub { color:var(--muted); font-size:15px; margin:0; }\n  .cover .meta { color:var(--muted); font-size:13px; margin-top:14px; }\n  .badge { display:inline-block; font-size:12px; font-weight:600; padding:2px 9px; border-radius:999px;\n    background:var(--accent-soft); color:var(--accent); }\n  h2 { font-size:21px; margin:38px 0 14px; padding-left:12px; border-left:4px solid var(--accent); }\n  h3 { font-size:16px; margin:24px 0 8px; color:#334155; }\n  ul { margin:10px 0; padding-left:22px; } li { margin:5px 0; }\n  code { font-family:\"JetBrains Mono\",\"Consolas\",\"D2Coding\",monospace; background:var(--code-bg);\n    padding:1px 6px; border-radius:4px; font-size:.88em; }\n  table { border-collapse:collapse; width:100%; margin:14px 0; font-size:14px; }\n  th,td { border:1px solid var(--line); padding:8px 11px; text-align:left; vertical-align:top; }\n  thead th { background:var(--th); font-weight:600; color:#334155; }\n  td.num,th.num { text-align:right; font-variant-numeric:tabular-nums; }\n  tbody tr:nth-child(even){ background:#fcfdfe; }\n  .callout { border:1px solid var(--line); border-left:4px solid var(--accent); background:var(--accent-soft);\n    border-radius:8px; padding:12px 16px; margin:16px 0; }\n  .callout.warn { border-left-color:var(--warn); background:#fffbeb; }\n  .callout .label { font-weight:700; color:#155e75; } .callout.warn .label { color:#92400e; }\n  pre { background:#0f172a; color:#e2e8f0; border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:13px; line-height:1.5; }\n  pre code { background:none; color:inherit; padding:0; }\n  .src { color:var(--muted); font-size:12.5px; font-style:italic; margin-top:6px; }\n  .kpi-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:16px 0; }\n  .kpi { border:1px solid var(--line); border-radius:8px; padding:12px 14px; }\n  .kpi .k { font-size:12px; color:var(--muted); } .kpi .v { font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; }\n  footer { margin-top:40px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:12.5px; }\n  @media print { body{background:#fff;} .report{border:none;box-shadow:none;margin:0;max-width:none;padding:0;} }\n</style>\n</head>\n<body>\n<article class=\"report\">\n  <header class=\"cover\">\n    <div class=\"badge\">모델 분석보고서</div>\n    <h1>JMDC 외래 수요예측 모델 분석보고서</h1>\n    <p class=\"sub\">jmdc_monthly_utilization 데이터셋 · 모델 개발 과정 문서화</p>\n    <p class=\"meta\">생성: 2026-06-26 · 작성: ML Auto Flow · 모델 유형: Random Forest(랜덤 포레스트)</p>\n  </header>\n\n  <div class=\"callout\"><span class=\"label\">목적</span> — 본 문서는 이 파이프라인의 <b>① 데이터셋 구조</b>와 <b>② 모델 개발 과정·결과</b>를 자동 수집된 메타데이터로 정리한 것입니다. 모든 수치는 동일 파이프라인 실행 결과에서 가져왔습니다(창작 없음). API 키 미설정 또는 AI 생성 실패 시 제공되는 <b>결정적 폴백 보고서</b>입니다.</div>\n\n  <h2>1. 요약</h2>\n  <ul>\n    <li><b>모델 유형:</b> Random Forest(랜덤 포레스트)</li>\n    <li><b>데이터:</b> jmdc_monthly_utilization (730행 × 9열)</li>\n    <li><b>타깃 변수:</b> <code>visits</code></li>\n    <li><b>모델:</b> Random Forest(랜덤 포레스트)</li>\n    <li><b>데이터 분할:</b> <code>train_size=0.7000</code>, <code>random_state=42</code>, <code>shuffle=True</code>, <code>stratify=False</code></li>\n  </ul>\n  <div class=\"kpi-grid\"><div class=\"kpi\"><div class=\"k\">지표</div><div class=\"v\">(자료 없음)</div></div></div>\n\n  <h2>2. 데이터셋 개요</h2>\n  <table><tbody>\n    <tr><th>데이터셋 이름</th><td>jmdc_monthly_utilization</td></tr>\n    <tr><th>파일/출처</th><td><code>jmdc_monthly_utilization.csv</code></td></tr>\n    <tr><th>행 수</th><td>730</td></tr>\n    <tr><th>열 수</th><td>9</td></tr>\n    <tr><th>모델 유형</th><td>Random Forest(랜덤 포레스트)</td></tr>\n    <tr><th>타깃 변수</th><td><code>visits</code></td></tr>\n  </tbody></table>\n  \n  <p class=\"src\">출처: jmdc_monthly_utilization.csv</p>\n\n  <h2>3. 변수(컬럼) 사전</h2>\n  <table><thead><tr><th class=\"num\">#</th><th>컬럼명</th><th>유형</th><th>예시값</th><th>사용 여부</th></tr></thead><tbody><tr><td class=\"num\">1</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">2</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">3</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">4</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">5</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">6</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">7</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">8</td><td><code></code></td><td></td><td></td><td>미사용</td></tr>\n<tr><td class=\"num\">9</td><td><code></code></td><td></td><td></td><td>미사용</td></tr></tbody></table>\n  <div class=\"callout warn\"><span class=\"label\">사용/미사용 특성</span> — 학습에 사용된 특성 9개: <code>day_idx</code>, <code>dow_sin</code>, <code>dow_cos</code>, <code>month_sin</code>, <code>month_cos</code>, <code>is_weekend</code>, <code>is_flu_season</code>, <code>temp</code>, <code>enrollees</code>. 전체 9개 컬럼 중 나머지는 미사용(타깃·인코딩 미적용 등).</div>\n\n  <h2>4. 타깃/클래스 분포</h2>\n  <p>타깃 분포 정보가 메타데이터에 없습니다. (자료 없음)</p>\n\n  <h2>5. 모델 개발 과정 (파이프라인)</h2>\n  <pre><code>[1] LoadData (Load)  →  [2] FeatureEngineer (FE)  →  [3] RandomForest (RF)  →  [4] SplitData (Split)  →  [5] TrainModel (Train)  →  [6] ScoreModel (Score)  →  [7] EvaluateModel (Eval)</code></pre>\n  <h3>Load <span style=\"color:#64748b;font-weight:400;\">(LoadData)</span></h3><ul><li>주요 파라미터: <code>source=jmdc_monthly_utilization.csv</code></li></ul>\n<h3>FE <span style=\"color:#64748b;font-weight:400;\">(FeatureEngineer)</span></h3><ul><li>주요 파라미터: <code>operations=[object Object], [object Object]</code></li></ul>\n<h3>RF <span style=\"color:#64748b;font-weight:400;\">(RandomForest)</span></h3><ul><li>주요 파라미터: <code>model_purpose=regression</code>, <code>n_estimators=40</code>, <code>criterion=mse</code>, <code>max_depth=16</code></li></ul>\n<h3>Split <span style=\"color:#64748b;font-weight:400;\">(SplitData)</span></h3><ul><li>주요 파라미터: <code>train_size=0.7</code>, <code>random_state=42</code>, <code>shuffle=True</code>, <code>stratify=False</code></li></ul>\n<h3>Train <span style=\"color:#64748b;font-weight:400;\">(TrainModel)</span></h3><ul><li>주요 파라미터: <code>feature_columns=day_idx, dow_sin, dow_cos, month_sin, month_cos, is_weekend, is_flu_season, temp, enrollees</code>, <code>label_column=visits</code></li></ul>\n<h3>Score <span style=\"color:#64748b;font-weight:400;\">(ScoreModel)</span></h3><ul><li>주요 파라미터: (자료 없음)</li></ul>\n<h3>Eval <span style=\"color:#64748b;font-weight:400;\">(EvaluateModel)</span></h3><ul><li>주요 파라미터: <code>model_type=regression</code>, <code>label_column=visits</code>, <code>prediction_column=Predict</code>, <code>threshold=0.5</code></li></ul>\n\n  <h2>6. 분석 결과와 해석</h2>\n  <p>평가 결과 메타데이터가 없습니다. (자료 없음)</p>\n\n  <h2>7. 재현성</h2>\n  <ul>\n    <li>캔버스 모듈은 브라우저 Python(Pyodide)으로 실행되고, \"전체 코드 보기\"는 외부에서 그대로 실행되는 standalone Python을 내보냅니다.</li>\n    <li>난수는 분할/모델 시드(<code>random_state</code>)로 고정되어 동일 결과가 재현됩니다.</li>\n    <li>본 보고서가 인용한 수치는 위 파이프라인의 결정적 실행 결과에서 직접 수집되었습니다.</li>\n  </ul>\n\n  <h2>8. 결론 및 한계</h2>\n  <ul>\n    <li>본 보고서는 자동 수집 메타데이터 기반으로 작성되었습니다. 메타데이터에 없는 항목은 \"(자료 없음)\"으로 표기됩니다.</li>\n    \n    <li>더 풍부한 해설(도메인 배경·개선 제안)은 상단 설정에서 Claude API 키를 입력하면 AI 생성 보고서로 보강됩니다.</li>\n  </ul>\n  <h2>추가 정보 (사용자 제공)</h2><div class=\"callout\">데이터: JMDC 합성 월별 외래 이용(jmdc_monthly_utilization.csv, 730일). 타깃: visits(일별 외래 방문수). 특성: day_idx·year·month·dow·is_weekend·is_flu_season·temp·enrollees. 모델: RandomForest 회귀 + FeatureEngineer(순환·상호작용 파생). 파이프라인 끝 EvaluateModel 출력을 report_in_eval에 연결해 수요예측 모델의 개발 과정·성능지표·해석을 HTML 보고서로 생성한다(고급 사용자 실행, 키 없으면 결정적 폴백).</div>\n\n  <footer>본 보고서는 ML Auto Flow의 실제 파이프라인 메타데이터를 기반으로 자동 생성되었습니다. · 모듈: <b>모델 분석보고서</b> · 생성 도구: ML Auto Flow (결정적 폴백)</footer>\n</article>\n</body>\n</html>",
+            "generatedAt": "2026-06-26T00:00:00.000Z",
+            "source": "fallback",
+            "context": {
+              "dataSource": "jmdc_monthly_utilization.csv",
+              "datasetName": "jmdc_monthly_utilization",
+              "title": "JMDC 외래 수요예측 모델 분석보고서",
+              "split": {
+                "train_size": 0.7,
+                "random_state": 42,
+                "shuffle": true,
+                "stratify": false
+              },
+              "modelDefinition": {
+                "kind": "Random Forest(랜덤 포레스트)",
+                "params": {
+                  "model_purpose": "regression",
+                  "n_estimators": 40,
+                  "criterion": "mse",
+                  "max_depth": 16,
+                  "max_features": null
+                }
+              },
+              "features": [
+                "day_idx",
+                "dow_sin",
+                "dow_cos",
+                "month_sin",
+                "month_cos",
+                "is_weekend",
+                "is_flu_season",
+                "temp",
+                "enrollees"
+              ],
+              "labelColumn": "visits",
+              "modelType": "Random Forest(랜덤 포레스트)",
+              "steps": [
+                {
+                  "type": "LoadData",
+                  "name": "Load",
+                  "params": {
+                    "source": "jmdc_monthly_utilization.csv"
+                  }
+                },
+                {
+                  "type": "FeatureEngineer",
+                  "name": "FE",
+                  "params": {
+                    "operations": [
+                      {
+                        "type": "cyclical",
+                        "column": "dow",
+                        "period": 7
+                      },
+                      {
+                        "type": "cyclical",
+                        "column": "month",
+                        "period": 12
+                      }
+                    ]
+                  }
+                },
+                {
+                  "type": "RandomForest",
+                  "name": "RF",
+                  "params": {
+                    "model_purpose": "regression",
+                    "n_estimators": 40,
+                    "criterion": "mse",
+                    "max_depth": 16,
+                    "max_features": null
+                  }
+                },
+                {
+                  "type": "SplitData",
+                  "name": "Split",
+                  "params": {
+                    "train_size": 0.7,
+                    "random_state": 42,
+                    "shuffle": "True",
+                    "stratify": "False",
+                    "stratify_column": null
+                  }
+                },
+                {
+                  "type": "TrainModel",
+                  "name": "Train",
+                  "params": {
+                    "feature_columns": [
+                      "day_idx",
+                      "dow_sin",
+                      "dow_cos",
+                      "month_sin",
+                      "month_cos",
+                      "is_weekend",
+                      "is_flu_season",
+                      "temp",
+                      "enrollees"
+                    ],
+                    "label_column": "visits"
+                  }
+                },
+                {
+                  "type": "ScoreModel",
+                  "name": "Score",
+                  "params": {}
+                },
+                {
+                  "type": "EvaluateModel",
+                  "name": "Eval",
+                  "params": {
+                    "model_type": "regression",
+                    "label_column": "visits",
+                    "prediction_column": "Predict",
+                    "threshold": 0.5
+                  }
+                }
+              ],
+              "rowCount": 730,
+              "columnCount": 9,
+              "columns": [
+                "day_idx",
+                "year",
+                "month",
+                "dow",
+                "is_weekend",
+                "is_flu_season",
+                "temp",
+                "enrollees",
+                "visits"
+              ],
+              "extraInfo": "데이터: JMDC 합성 월별 외래 이용(jmdc_monthly_utilization.csv, 730일). 타깃: visits(일별 외래 방문수). 특성: day_idx·year·month·dow·is_weekend·is_flu_season·temp·enrollees. 모델: RandomForest 회귀 + FeatureEngineer(순환·상호작용 파생). 파이프라인 끝 EvaluateModel 출력을 report_in_eval에 연결해 수요예측 모델의 개발 과정·성능지표·해석을 HTML 보고서로 생성한다(고급 사용자 실행, 키 없으면 결정적 폴백).",
+              "generatedAt": "2026-06-26"
+            }
+          }
         }
       ],
       "connections": [
@@ -2525,6 +2677,12 @@
           "fromPort": "scored_data_out",
           "toModuleIndex": 6,
           "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 6,
+          "fromPort": "evaluation_out",
+          "toModuleIndex": 7,
+          "toPort": "report_in_eval"
         }
       ]
     }
@@ -2637,6 +2795,102 @@
             "logrank_method": "standard",
             "stratify_cols": []
           }
+        },
+        {
+          "type": "ModelAnalysisReport",
+          "name": "모델 분석보고서",
+          "parameters": {
+            "title": "JMDC 코호트 발생률·생존비교 분석보고서",
+            "extra_info": "JMDC 합성 코호트 역학 데모(모델 학습이 아닌 역학 지표 산출 파이프라인). J1 코호트 빌더 → J2 아웃컴 라벨러(ICD-10 기반: 대장암 C18-20·뇌졸중 I60-64·AMI I21-22·당뇨 E10-14, 5년 윈도우) → J3 발생률(연령·성 표준화, 일본 2015 표준인구) · J4 생존 비교(로그랭크). 종단 생존비교 결과를 report_in에 연결해 코호트 정의·아웃컴 라벨링·발생률·생존분석 과정을 HTML 보고서로 문서화한다(고급 사용자 실행, 키 없으면 결정적 폴백).",
+            "extra_pdf_text": "",
+            "extra_pdf_name": "",
+            "use_web_research": true
+          },
+          "position": {
+            "x": 1100,
+            "y": 200
+          },
+          "outputData": {
+            "type": "ModelReportOutput",
+            "html": "<!DOCTYPE html>\n<html lang=\"ko\">\n<head>\n<meta charset=\"UTF-8\" />\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n<title>JMDC 코호트 발생률·생존비교 분석보고서</title>\n<style>\n  :root { --ink:#1e293b; --muted:#64748b; --line:#e2e8f0; --accent:#0891b2;\n    --accent-soft:#ecfeff; --th:#f8fafc; --good:#16a34a; --warn:#d97706; --bad:#dc2626; --code-bg:#f1f5f9; }\n  * { box-sizing: border-box; }\n  body { margin:0; background:#f1f5f9; color:var(--ink); line-height:1.65; font-size:15px;\n    font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",\"Malgun Gothic\",\"Apple SD Gothic Neo\",\"Noto Sans KR\",Roboto,sans-serif; }\n  .report { max-width:880px; margin:32px auto; background:#fff; border:1px solid var(--line);\n    border-radius:12px; padding:56px 64px; box-shadow:0 1px 3px rgba(15,23,42,.06); }\n  .cover { border-bottom:2px solid var(--ink); padding-bottom:22px; margin-bottom:32px; }\n  .cover h1 { font-size:30px; line-height:1.25; margin:0 0 10px; letter-spacing:-.01em; }\n  .cover .sub { color:var(--muted); font-size:15px; margin:0; }\n  .cover .meta { color:var(--muted); font-size:13px; margin-top:14px; }\n  .badge { display:inline-block; font-size:12px; font-weight:600; padding:2px 9px; border-radius:999px;\n    background:var(--accent-soft); color:var(--accent); }\n  h2 { font-size:21px; margin:38px 0 14px; padding-left:12px; border-left:4px solid var(--accent); }\n  h3 { font-size:16px; margin:24px 0 8px; color:#334155; }\n  ul { margin:10px 0; padding-left:22px; } li { margin:5px 0; }\n  code { font-family:\"JetBrains Mono\",\"Consolas\",\"D2Coding\",monospace; background:var(--code-bg);\n    padding:1px 6px; border-radius:4px; font-size:.88em; }\n  table { border-collapse:collapse; width:100%; margin:14px 0; font-size:14px; }\n  th,td { border:1px solid var(--line); padding:8px 11px; text-align:left; vertical-align:top; }\n  thead th { background:var(--th); font-weight:600; color:#334155; }\n  td.num,th.num { text-align:right; font-variant-numeric:tabular-nums; }\n  tbody tr:nth-child(even){ background:#fcfdfe; }\n  .callout { border:1px solid var(--line); border-left:4px solid var(--accent); background:var(--accent-soft);\n    border-radius:8px; padding:12px 16px; margin:16px 0; }\n  .callout.warn { border-left-color:var(--warn); background:#fffbeb; }\n  .callout .label { font-weight:700; color:#155e75; } .callout.warn .label { color:#92400e; }\n  pre { background:#0f172a; color:#e2e8f0; border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:13px; line-height:1.5; }\n  pre code { background:none; color:inherit; padding:0; }\n  .src { color:var(--muted); font-size:12.5px; font-style:italic; margin-top:6px; }\n  .kpi-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:16px 0; }\n  .kpi { border:1px solid var(--line); border-radius:8px; padding:12px 14px; }\n  .kpi .k { font-size:12px; color:var(--muted); } .kpi .v { font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; }\n  footer { margin-top:40px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:12.5px; }\n  @media print { body{background:#fff;} .report{border:none;box-shadow:none;margin:0;max-width:none;padding:0;} }\n</style>\n</head>\n<body>\n<article class=\"report\">\n  <header class=\"cover\">\n    <div class=\"badge\">모델 분석보고서</div>\n    <h1>JMDC 코호트 발생률·생존비교 분석보고서</h1>\n    <p class=\"sub\">파이프라인 메타데이터 기반 모델 분석보고서</p>\n    <p class=\"meta\">생성: 2026-06-26 · 작성: ML Auto Flow · 모델 유형: (자료 없음)</p>\n  </header>\n\n  <div class=\"callout\"><span class=\"label\">목적</span> — 본 문서는 이 파이프라인의 <b>① 데이터셋 구조</b>와 <b>② 모델 개발 과정·결과</b>를 자동 수집된 메타데이터로 정리한 것입니다. 모든 수치는 동일 파이프라인 실행 결과에서 가져왔습니다(창작 없음). API 키 미설정 또는 AI 생성 실패 시 제공되는 <b>결정적 폴백 보고서</b>입니다.</div>\n\n  <h2>1. 요약</h2>\n  <ul>\n    <li><b>모델 유형:</b> (자료 없음)</li>\n    <li><b>데이터:</b> (자료 없음) ((자료 없음)행 × (자료 없음)열)</li>\n    \n    \n    \n  </ul>\n  <div class=\"kpi-grid\"><div class=\"kpi\"><div class=\"k\">지표</div><div class=\"v\">(자료 없음)</div></div></div>\n\n  <h2>2. 데이터셋 개요</h2>\n  <table><tbody>\n    <tr><th>데이터셋 이름</th><td>(자료 없음)</td></tr>\n    <tr><th>파일/출처</th><td><code>(자료 없음)</code></td></tr>\n    <tr><th>행 수</th><td>(자료 없음)</td></tr>\n    <tr><th>열 수</th><td>(자료 없음)</td></tr>\n    <tr><th>모델 유형</th><td>(자료 없음)</td></tr>\n    <tr><th>타깃 변수</th><td>(자료 없음)</td></tr>\n  </tbody></table>\n  \n  <p class=\"src\">출처: (자료 없음)</p>\n\n  <h2>3. 변수(컬럼) 사전</h2>\n  <p>(자료 없음)</p>\n  <div class=\"callout warn\"><span class=\"label\">사용/미사용 특성</span> — 사용/미사용 특성 정보가 메타데이터에 없습니다. (자료 없음)</div>\n\n  <h2>4. 타깃/클래스 분포</h2>\n  <p>타깃 분포 정보가 메타데이터에 없습니다. (자료 없음)</p>\n\n  <h2>5. 모델 개발 과정 (파이프라인)</h2>\n  <pre><code>[1] JMDCCohortBuilder (코호트 빌더)  →  [2] JMDCOutcomeLabeler (아웃컴 라벨러)  →  [3] JMDCSurvivalCompare (생존 비교)</code></pre>\n  <h3>코호트 빌더 <span style=\"color:#64748b;font-weight:400;\">(JMDCCohortBuilder)</span></h3><ul><li>주요 파라미터: <code>data_source=synthetic</code>, <code>synthetic_n=100000</code>, <code>synthetic_seed=43</code>, <code>index_date_rule=birthday_age</code>, <code>index_age=50</code>, <code>index_fixed_date=2018-01-01</code>, <code>age_at_index_min=30</code>, <code>age_at_index_max=70</code></li></ul>\n<h3>아웃컴 라벨러 <span style=\"color:#64748b;font-weight:400;\">(JMDCOutcomeLabeler)</span></h3><ul><li>주요 파라미터: <code>outcome_diseases={&quot;colon_ca&quot;:[&quot;C18&quot;,&quot;C19&quot;,&quot;C20&quot;],&quot;stroke&quot;:[&quot;I60&quot;,&quot;I61&quot;,&quot;I62&quot;,&quot;I63&quot;,&quot;I64&quot;],&quot;ami&quot;:[&quot;I21&quot;,&quot;I22&quot;],&quot;diabetes&quot;:[&quot;E10&quot;,&quot;E11&quot;,&quot;E12&quot;,&quot;E13&quot;,&quot;E14&quot;]}</code>, <code>outcome_window_years=5</code>, <code>confirm_suspect_flag=true</code>, <code>multi_outcome_mode=single</code></li></ul>\n<h3>생존 비교 <span style=\"color:#64748b;font-weight:400;\">(JMDCSurvivalCompare)</span></h3><ul><li>주요 파라미터: <code>group_col=has_diabetes</code>, <code>time_horizons_years=1, 3, 5, 10</code>, <code>logrank_method=standard</code></li></ul>\n\n  <h2>6. 분석 결과와 해석</h2>\n  <p>평가 결과 메타데이터가 없습니다. (자료 없음)</p>\n\n  <h2>7. 재현성</h2>\n  <ul>\n    <li>캔버스 모듈은 브라우저 Python(Pyodide)으로 실행되고, \"전체 코드 보기\"는 외부에서 그대로 실행되는 standalone Python을 내보냅니다.</li>\n    <li>난수는 분할/모델 시드(<code>random_state</code>)로 고정되어 동일 결과가 재현됩니다.</li>\n    <li>본 보고서가 인용한 수치는 위 파이프라인의 결정적 실행 결과에서 직접 수집되었습니다.</li>\n  </ul>\n\n  <h2>8. 결론 및 한계</h2>\n  <ul>\n    <li>본 보고서는 자동 수집 메타데이터 기반으로 작성되었습니다. 메타데이터에 없는 항목은 \"(자료 없음)\"으로 표기됩니다.</li>\n    \n    <li>더 풍부한 해설(도메인 배경·개선 제안)은 상단 설정에서 Claude API 키를 입력하면 AI 생성 보고서로 보강됩니다.</li>\n  </ul>\n  <h2>추가 정보 (사용자 제공)</h2><div class=\"callout\">JMDC 합성 코호트 역학 데모(모델 학습이 아닌 역학 지표 산출 파이프라인). J1 코호트 빌더 → J2 아웃컴 라벨러(ICD-10 기반: 대장암 C18-20·뇌졸중 I60-64·AMI I21-22·당뇨 E10-14, 5년 윈도우) → J3 발생률(연령·성 표준화, 일본 2015 표준인구) · J4 생존 비교(로그랭크). 종단 생존비교 결과를 report_in에 연결해 코호트 정의·아웃컴 라벨링·발생률·생존분석 과정을 HTML 보고서로 문서화한다(고급 사용자 실행, 키 없으면 결정적 폴백).</div>\n\n  <footer>본 보고서는 ML Auto Flow의 실제 파이프라인 메타데이터를 기반으로 자동 생성되었습니다. · 모듈: <b>모델 분석보고서</b> · 생성 도구: ML Auto Flow (결정적 폴백)</footer>\n</article>\n</body>\n</html>",
+            "generatedAt": "2026-06-26T00:00:00.000Z",
+            "source": "fallback",
+            "context": {
+              "steps": [
+                {
+                  "type": "JMDCCohortBuilder",
+                  "name": "코호트 빌더",
+                  "params": {
+                    "data_source": "synthetic",
+                    "synthetic_n": 100000,
+                    "synthetic_seed": 43,
+                    "index_date_rule": "birthday_age",
+                    "index_age": 50,
+                    "index_fixed_date": "2018-01-01",
+                    "age_at_index_min": 30,
+                    "age_at_index_max": 70,
+                    "washout_years": 2,
+                    "exclusion_diseases": [
+                      "C00-C97"
+                    ],
+                    "disease_free_years": 0
+                  }
+                },
+                {
+                  "type": "JMDCOutcomeLabeler",
+                  "name": "아웃컴 라벨러",
+                  "params": {
+                    "outcome_diseases": {
+                      "colon_ca": [
+                        "C18",
+                        "C19",
+                        "C20"
+                      ],
+                      "stroke": [
+                        "I60",
+                        "I61",
+                        "I62",
+                        "I63",
+                        "I64"
+                      ],
+                      "ami": [
+                        "I21",
+                        "I22"
+                      ],
+                      "diabetes": [
+                        "E10",
+                        "E11",
+                        "E12",
+                        "E13",
+                        "E14"
+                      ]
+                    },
+                    "outcome_window_years": 5,
+                    "confirm_suspect_flag": true,
+                    "multi_outcome_mode": "single"
+                  }
+                },
+                {
+                  "type": "JMDCSurvivalCompare",
+                  "name": "생존 비교",
+                  "params": {
+                    "group_col": "has_diabetes",
+                    "time_horizons_years": [
+                      1,
+                      3,
+                      5,
+                      10
+                    ],
+                    "logrank_method": "standard",
+                    "stratify_cols": []
+                  }
+                }
+              ],
+              "title": "JMDC 코호트 발생률·생존비교 분석보고서",
+              "extraInfo": "JMDC 합성 코호트 역학 데모(모델 학습이 아닌 역학 지표 산출 파이프라인). J1 코호트 빌더 → J2 아웃컴 라벨러(ICD-10 기반: 대장암 C18-20·뇌졸중 I60-64·AMI I21-22·당뇨 E10-14, 5년 윈도우) → J3 발생률(연령·성 표준화, 일본 2015 표준인구) · J4 생존 비교(로그랭크). 종단 생존비교 결과를 report_in에 연결해 코호트 정의·아웃컴 라벨링·발생률·생존분석 과정을 HTML 보고서로 문서화한다(고급 사용자 실행, 키 없으면 결정적 폴백).",
+              "generatedAt": "2026-06-26"
+            }
+          }
         }
       ],
       "connections": [
@@ -2657,6 +2911,12 @@
           "fromPort": "data_out",
           "toModuleIndex": 3,
           "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 3,
+          "fromPort": "data_out",
+          "toModuleIndex": 4,
+          "toPort": "report_in"
         }
       ]
     }
