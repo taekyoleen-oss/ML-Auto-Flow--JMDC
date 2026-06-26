@@ -168,15 +168,29 @@ ${
  * - 어떤 실패든 결정적 폴백으로 graceful degradation.
  */
 export async function generateModelReportHtml(
-  ctx: ReportContext
+  ctx: ReportContext,
+  onProgress?: (charsSoFar: number) => void
 ): Promise<{ html: string; source: "ai" | "fallback" }> {
   if (!hasApiKey()) {
     return { html: buildModelReportHtmlFallback(ctx), source: "fallback" };
   }
   const prompt = buildModelReportPrompt(ctx);
   try {
-    // CLAUDE_CAPABLE 단일 호출. max_tokens는 보고서/추천용 상향(16000).
-    const raw = await runPrompt(prompt, CLAUDE_CAPABLE, 16000);
+    // CLAUDE_CAPABLE 스트리밍 호출. 보고서는 길어 ~수십초~2분 소요되므로
+    // 스트리밍으로 (a) 비스트리밍 HTTP 타임아웃 회피, (b) 진행률(onProgress) 제공.
+    const client = getClaudeClient(); // 키 없으면 ApiKeyMissingError(위에서 이미 hasApiKey로 가드)
+    const stream = client.messages.stream({
+      model: CLAUDE_CAPABLE,
+      max_tokens: 16000,
+      messages: [{ role: "user", content: prompt }],
+    });
+    let raw = "";
+    for await (const ev of stream) {
+      if (ev.type === "content_block_delta" && (ev as any).delta?.type === "text_delta") {
+        raw += (ev as any).delta.text;
+        onProgress?.(raw.length);
+      }
+    }
     const html = stripHtmlFence(raw);
     if (isValidReportHtml(html)) {
       return { html, source: "ai" };

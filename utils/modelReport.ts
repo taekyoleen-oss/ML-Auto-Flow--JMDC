@@ -136,6 +136,38 @@ export function gatherReportContext(
     }
   }
 
+  // 2-b) 행/열 수 보강: LoadData 출력이 없거나 totalRowCount 미설정이면
+  // 다른 조상의 DataPreview(직접/래퍼/Split train+test)에서 유추한다.
+  // (보고서가 "(자료 없음)"으로 나오던 케이스 방지 — 어느 조상이든 실행됐으면 메타 확보)
+  if (ctx.rowCount === undefined || ctx.columnCount === undefined || !ctx.columns) {
+    const applyDp = (dp: any) => {
+      if (!dp) return;
+      if (ctx.rowCount === undefined && typeof dp.totalRowCount === "number") ctx.rowCount = dp.totalRowCount;
+      if (ctx.columnCount === undefined && Array.isArray(dp.columns)) ctx.columnCount = dp.columns.length;
+      if (!ctx.columns && Array.isArray(dp.columns)) {
+        ctx.columns = dp.columns.map((c: any) => ({ name: c.name, type: c.type }));
+      }
+      if (!ctx.sampleRows && Array.isArray(dp.rows)) ctx.sampleRows = dp.rows.slice(0, 5);
+    };
+    for (const m of ancestors) {
+      const od: any = m.outputData;
+      if (!od) continue;
+      if (od.type === "DataPreview") applyDp(od);
+      else if (od.data && od.data.type === "DataPreview") applyDp(od.data);
+      else if (od.type === "SplitDataOutput") {
+        if (ctx.rowCount === undefined) {
+          const tr = od.train?.totalRowCount ?? 0;
+          const te = od.test?.totalRowCount ?? 0;
+          if (tr || te) ctx.rowCount = tr + te;
+        }
+        applyDp(od.train);
+      }
+      if (ctx.rowCount !== undefined && ctx.columnCount !== undefined && ctx.columns) break;
+    }
+  }
+  // 최후: columns만 있고 columnCount 미설정이면 보강.
+  if (ctx.columnCount === undefined && Array.isArray(ctx.columns)) ctx.columnCount = ctx.columns.length;
+
   // 3) SplitData — 분할 설정.
   const split = find(ModuleType.SplitData);
   if (split) {

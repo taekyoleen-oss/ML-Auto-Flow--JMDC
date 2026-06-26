@@ -11042,7 +11042,14 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
             if (mergedExtra) ctx.extraInfo = mergedExtra;
             ctx.generatedAt = new Date().toISOString().slice(0, 10);
 
-            const { html, source } = await generateModelReportHtml(ctx);
+            // 스트리밍 진행률 로그(과도한 로그 방지: 4000자 단위로만).
+            let lastLoggedChars = 0;
+            const { html, source } = await generateModelReportHtml(ctx, (chars) => {
+              if (chars - lastLoggedChars >= 4000) {
+                lastLoggedChars = chars;
+                addLog("INFO", `AI 보고서 생성 중… ${chars.toLocaleString()}자 작성됨`);
+              }
+            });
 
             newOutputData = {
               type: "ModelReportOutput",
