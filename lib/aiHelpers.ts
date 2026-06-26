@@ -4,7 +4,7 @@
 
 import { getClaudeClient, hasApiKey, extractText, CLAUDE_FAST, CLAUDE_CAPABLE } from "./aiClient";
 import { ReportContext } from "../types";
-import { buildModelReportHtmlFallback } from "../utils/modelReport";
+import { buildModelReportHtmlFallback, sanitizeReportContextForPrompt } from "../utils/modelReport";
 
 /** 빠른 응답용 기본 모델. 무거운 추론이 필요하면 CLAUDE_CAPABLE로 교체 가능. */
 export const DEFAULT_AI_MODEL = CLAUDE_FAST;
@@ -151,7 +151,7 @@ function buildModelReportPrompt(ctx: ReportContext): string {
 6) HTML 외에 다른 텍스트(설명·코드펜스)를 출력하지 마라.
 
 [파이프라인 메타데이터 JSON]
-${JSON.stringify(ctx, null, 2)}
+${JSON.stringify(sanitizeReportContextForPrompt(ctx), null, 2)}
 
 ${
   ctx.extraInfo && ctx.extraInfo.trim()

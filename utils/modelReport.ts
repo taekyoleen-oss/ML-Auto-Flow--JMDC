@@ -425,6 +425,39 @@ function pipelineDiagram(ctx: ReportContext): string {
     .join("  →  ");
 }
 
+/**
+ * AI 프롬프트용으로 ReportContext에서 무거운/불필요 필드를 제거한다.
+ * 특히 steps[].params.fileContent(원본 CSV 전체)가 JSON.stringify로 프롬프트에 섞이면
+ * 토큰 한도(1M)를 초과해 400이 나므로 반드시 제거한다(폴백 pipelineSteps와 동일 제외).
+ * 방어적으로 긴 문자열 파라미터도 잘라낸다. sampleRows는 5행으로 제한.
+ */
+export function sanitizeReportContextForPrompt(ctx: ReportContext): ReportContext {
+  const HEAVY_KEYS = ["fileContent", "columnSelections", "_outlierOutput"];
+  const cleanParams = (params: any): any => {
+    if (!params || typeof params !== "object") return params;
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(params)) {
+      if (HEAVY_KEYS.includes(k)) continue;
+      if (typeof v === "string" && v.length > 3000) {
+        out[k] = v.slice(0, 3000) + "…(생략)";
+        continue;
+      }
+      out[k] = v;
+    }
+    return out;
+  };
+  return {
+    ...ctx,
+    sampleRows: Array.isArray(ctx.sampleRows) ? ctx.sampleRows.slice(0, 5) : ctx.sampleRows,
+    modelDefinition: ctx.modelDefinition
+      ? { ...ctx.modelDefinition, params: cleanParams(ctx.modelDefinition.params) }
+      : ctx.modelDefinition,
+    steps: Array.isArray(ctx.steps)
+      ? ctx.steps.map((s) => ({ ...s, params: cleanParams(s.params) }))
+      : ctx.steps,
+  };
+}
+
 function pipelineSteps(ctx: ReportContext): string {
   if (!ctx.steps || !ctx.steps.length) return `<p>${NA}</p>`;
   return ctx.steps
