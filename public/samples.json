@@ -1225,6 +1225,21 @@
             "x": 1060,
             "y": 320
           }
+        },
+        {
+          "type": "ModelAnalysisReport",
+          "name": "모델 분석보고서",
+          "parameters": {
+            "title": "Adult 소득 분류 모델 분석보고서",
+            "extra_info": "데이터: UCI Adult(Census Income), 이진 분류(income >50K 여부). 모델: 의사결정나무(criterion=gini, max_depth=8), 수치형 6개 특성(age·fnlwgt·education-num·capital-gain·capital-loss·hours-per-week). 파이프라인 끝 EvaluateModel 출력을 report_in_eval에 연결하면 개발 과정·지표·해석을 HTML 보고서로 생성한다(고급 사용자 실행, 키 없으면 결정적 폴백).",
+            "extra_pdf_text": "",
+            "extra_pdf_name": "",
+            "use_web_research": true
+          },
+          "position": {
+            "x": 1060,
+            "y": 580
+          }
         }
       ],
       "connections": [
@@ -1263,6 +1278,12 @@
           "fromPort": "scored_data_out",
           "toModuleIndex": 5,
           "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 5,
+          "fromPort": "evaluation_out",
+          "toModuleIndex": 6,
+          "toPort": "report_in_eval"
         }
       ]
     }
