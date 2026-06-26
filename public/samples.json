@@ -1143,6 +1143,21 @@
             "x": 420,
             "y": 80
           }
+        },
+        {
+          "type": "ModelAnalysisReport",
+          "name": "모델 분석보고서",
+          "parameters": {
+            "title": "Restaurant Ratings 추천 모델 분석보고서",
+            "extra_info": "데이터: Restaurant Ratings(레스토랑 평점 추천). 모델: Recommender. Recommender 출력을 report_in(데이터)에 연결하면 추천 파이프라인·데이터·결과 개요를 HTML 보고서로 생성한다(고급 사용자 실행, 키 없으면 결정적 폴백).",
+            "extra_pdf_text": "",
+            "extra_pdf_name": "",
+            "use_web_research": true
+          },
+          "position": {
+            "x": 760,
+            "y": 80
+          }
         }
       ],
       "connections": [
@@ -1151,6 +1166,12 @@
           "fromPort": "data_out",
           "toModuleIndex": 1,
           "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 1,
+          "fromPort": "data_out",
+          "toModuleIndex": 2,
+          "toPort": "report_in"
         }
       ]
     }
