@@ -157,7 +157,9 @@ export async function generateModelReportHtml(
     return { html: buildModelReportHtmlFallback(ctx), source: "fallback" };
   }
   const prompt = buildModelReportPrompt(ctx);
-  const models = ["gemini-2.5-pro", DEFAULT_AI_MODEL];
+  // flash-first: 무료티어 키는 gemini-2.5-pro 할당량이 0(429)이므로 flash를 먼저 시도해
+  // 단일 호출로 실제 AI 생성을 받는다. flash 실패 시에만 pro(유료 키 환경) 시도, 그래도 실패면 폴백.
+  const models = [DEFAULT_AI_MODEL, "gemini-2.5-pro"];
   for (const model of models) {
     try {
       const raw = await runPrompt(prompt, model);

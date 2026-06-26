@@ -201,9 +201,19 @@ export function validateModuleConnections(
 ): string | null {
   if (module.inputs.length === 0) return null;
 
-  const unconnected = module.inputs.filter(
-    (port) => !connections.some((c) => c.to.moduleId === module.id && c.to.portName === port.name)
-  );
+  const isConnected = (portName: string) =>
+    connections.some((c) => c.to.moduleId === module.id && c.to.portName === portName);
+
+  // 모델 분석보고서: 입력 포트(report_in/report_in_eval/report_in_model) 중 '하나 이상'만 연결되면 됨.
+  // gatherReportContext가 어느 포트로든 업스트림 파이프라인을 거슬러 수집하므로 전부 연결할 필요가 없다.
+  if (module.type === 'ModelAnalysisReport') {
+    const anyConnected = module.inputs.some((port) => isConnected(port.name));
+    return anyConnected
+      ? null
+      : "보고서를 생성하려면 모델/평가/데이터 출력 중 하나 이상을 입력 포트에 연결해주세요.";
+  }
+
+  const unconnected = module.inputs.filter((port) => !isConnected(port.name));
 
   if (unconnected.length > 0) {
     const portNames = unconnected.map((p) => `'${p.name}'`).join(', ');
