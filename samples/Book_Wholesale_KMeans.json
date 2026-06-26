@@ -46,6 +46,21 @@
         "x": 720,
         "y": 180
       }
+    },
+    {
+      "type": "ModelAnalysisReport",
+      "name": "모델 분석보고서",
+      "parameters": {
+        "title": "Wholesale 고객 군집(K-Means) 분석보고서",
+        "extra_info": "데이터: Wholesale customers(도매 고객 군집). 모델: K-Means. TrainClusteringModel(군집 모델: k·실루엣·관성)을 report_in_model에, ClusteringData(클러스터 할당 결과)를 report_in에 연결하면 군집 분석 과정·분포를 HTML 보고서로 생성한다(고급 사용자 실행, 키 없으면 결정적 폴백).",
+        "extra_pdf_text": "",
+        "extra_pdf_name": "",
+        "use_web_research": true
+      },
+      "position": {
+        "x": 1050,
+        "y": 180
+      }
     }
   ],
   "connections": [
@@ -72,6 +87,18 @@
       "fromPort": "data_out",
       "toModuleIndex": 3,
       "toPort": "data_in"
+    },
+    {
+      "fromModuleIndex": 2,
+      "fromPort": "trained_model_out",
+      "toModuleIndex": 4,
+      "toPort": "report_in_model"
+    },
+    {
+      "fromModuleIndex": 3,
+      "fromPort": "clustered_data_out",
+      "toModuleIndex": 4,
+      "toPort": "report_in"
     }
   ]
 }

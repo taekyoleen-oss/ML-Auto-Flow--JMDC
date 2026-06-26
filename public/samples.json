@@ -1382,6 +1382,21 @@
             "x": 1060,
             "y": 320
           }
+        },
+        {
+          "type": "ModelAnalysisReport",
+          "name": "모델 분석보고서",
+          "parameters": {
+            "title": "Automobile 선형회귀 모델 분석보고서",
+            "extra_info": "데이터: Automobile(자동차 가격 회귀). 모델: 선형회귀(LinearRegression). 파이프라인 끝 EvaluateModel 출력을 report_in_eval에 연결하면 회귀 지표(MSE/RMSE/MAE/R²·상대오차)·잔차·개발 과정을 HTML 보고서로 생성한다(고급 사용자 실행, 키 없으면 결정적 폴백).",
+            "extra_pdf_text": "",
+            "extra_pdf_name": "",
+            "use_web_research": true
+          },
+          "position": {
+            "x": 1060,
+            "y": 580
+          }
         }
       ],
       "connections": [
@@ -1420,6 +1435,12 @@
           "fromPort": "scored_data_out",
           "toModuleIndex": 5,
           "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 5,
+          "fromPort": "evaluation_out",
+          "toModuleIndex": 6,
+          "toPort": "report_in_eval"
         }
       ]
     }
@@ -1478,6 +1499,21 @@
             "x": 720,
             "y": 180
           }
+        },
+        {
+          "type": "ModelAnalysisReport",
+          "name": "모델 분석보고서",
+          "parameters": {
+            "title": "Wholesale 고객 군집(K-Means) 분석보고서",
+            "extra_info": "데이터: Wholesale customers(도매 고객 군집). 모델: K-Means. TrainClusteringModel(군집 모델: k·실루엣·관성)을 report_in_model에, ClusteringData(클러스터 할당 결과)를 report_in에 연결하면 군집 분석 과정·분포를 HTML 보고서로 생성한다(고급 사용자 실행, 키 없으면 결정적 폴백).",
+            "extra_pdf_text": "",
+            "extra_pdf_name": "",
+            "use_web_research": true
+          },
+          "position": {
+            "x": 1050,
+            "y": 180
+          }
         }
       ],
       "connections": [
@@ -1504,6 +1540,18 @@
           "fromPort": "data_out",
           "toModuleIndex": 3,
           "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 2,
+          "fromPort": "trained_model_out",
+          "toModuleIndex": 4,
+          "toPort": "report_in_model"
+        },
+        {
+          "fromModuleIndex": 3,
+          "fromPort": "clustered_data_out",
+          "toModuleIndex": 4,
+          "toPort": "report_in"
         }
       ]
     }
@@ -1604,6 +1652,21 @@
             "x": 710,
             "y": 50
           }
+        },
+        {
+          "type": "ModelAnalysisReport",
+          "name": "모델 분석보고서",
+          "parameters": {
+            "title": "Bike Sharing 수요예측 모델 분석보고서",
+            "extra_info": "데이터: UCI Bike Sharing(시간별 자전거 수요, 회귀). 모델: 랜덤포레스트 회귀. EvaluateModel 출력을 report_in_eval에 연결하면 회귀 지표·잔차 진단·개발 과정을 HTML 보고서로 생성한다(고급 사용자 실행, 키 없으면 결정적 폴백).",
+            "extra_pdf_text": "",
+            "extra_pdf_name": "",
+            "use_web_research": true
+          },
+          "position": {
+            "x": 1050,
+            "y": 50
+          }
         }
       ],
       "connections": [
@@ -1642,6 +1705,12 @@
           "fromPort": "scored_data_out",
           "toModuleIndex": 5,
           "toPort": "data_in"
+        },
+        {
+          "fromModuleIndex": 5,
+          "fromPort": "evaluation_out",
+          "toModuleIndex": 6,
+          "toPort": "report_in_eval"
         }
       ]
     }
