@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { CanvasModule, TrainedClusteringModelOutput, DataPreview, Connection, ModuleType } from '../types';
 import { XCircleIcon, SparklesIcon } from './icons';
 import { ClusterScatterPlot, useCluster2DProjection, pickNumericFeatures } from './ClusterScatterPlot';
+import { TableDownloadButton } from './TableDownloadButton';
 
 interface TrainedClusteringModelPreviewModalProps {
     module: CanvasModule;
@@ -44,7 +45,8 @@ const KMeansResults: React.FC<{
     moduleId: string;
     modules: CanvasModule[];
     connections: Connection[];
-}> = ({ output, inputData, moduleId, modules, connections }) => {
+    baseName: string;
+}> = ({ output, inputData, moduleId, modules, connections, baseName }) => {
     const centroids = output.centroids || [];
     const inertia = output.inertia || 0;
     const featureColumns = output.featureColumns || [];
@@ -163,7 +165,18 @@ const KMeansResults: React.FC<{
         <div className="space-y-6">
             {/* 클러스터 중심점 정보 */}
             <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-3">클러스터 중심점 (Centroids)</h3>
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-800">클러스터 중심점 (Centroids)</h3>
+                    <TableDownloadButton
+                        filename={`${baseName}_중심점`}
+                        columns={['클러스터', ...featureColumns]}
+                        rows={centroids.map((centroid, idx) => {
+                            const r: Record<string, any> = { '클러스터': `Cluster ${idx}` };
+                            featureColumns.forEach(col => { r[col] = centroid[col]; });
+                            return r;
+                        })}
+                    />
+                </div>
                 <div className="overflow-x-auto border border-gray-200 rounded-lg">
                     <table className="min-w-full text-sm">
                         <thead className="bg-gray-50">
@@ -249,7 +262,22 @@ const KMeansResults: React.FC<{
                 <h3 className="text-lg font-semibold text-gray-800 mb-3">클러스터별 통계량</h3>
                 {clusterStats.map((stats, clusterIdx) => (
                     <div key={clusterIdx} className="mb-4">
-                        <h4 className="text-md font-semibold text-gray-700 mb-2">Cluster {clusterIdx} (n={clusterCounts[clusterIdx]})</h4>
+                        <div className="flex items-center justify-between mb-2">
+                            <h4 className="text-md font-semibold text-gray-700">Cluster {clusterIdx} (n={clusterCounts[clusterIdx]})</h4>
+                            <TableDownloadButton
+                                filename={`${baseName}_cluster${clusterIdx}_통계량`}
+                                columns={['특성', '평균', '표준편차', '최소값', '최대값']}
+                                rows={featureColumns
+                                    .filter(col => stats[col])
+                                    .map(col => ({
+                                        '특성': col,
+                                        '평균': stats[col].mean,
+                                        '표준편차': stats[col].std,
+                                        '최소값': stats[col].min,
+                                        '최대값': stats[col].max,
+                                    }))}
+                            />
+                        </div>
                         <div className="overflow-x-auto border border-gray-200 rounded-lg">
                             <table className="min-w-full text-sm">
                                 <thead className="bg-gray-50">
@@ -284,7 +312,18 @@ const KMeansResults: React.FC<{
 
             {/* 클러스터 간 거리 행렬 */}
             <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-3">클러스터 간 거리</h3>
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-800">클러스터 간 거리</h3>
+                    <TableDownloadButton
+                        filename={`${baseName}_클러스터간거리`}
+                        columns={['클러스터', ...centroids.map((_, idx) => `Cluster ${idx}`)]}
+                        rows={centroidDistances.map((row, idx) => {
+                            const r: Record<string, any> = { '클러스터': `Cluster ${idx}` };
+                            row.forEach((distance, colIdx) => { r[`Cluster ${colIdx}`] = distance; });
+                            return r;
+                        })}
+                    />
+                </div>
                 <div className="overflow-x-auto border border-gray-200 rounded-lg">
                     <table className="min-w-full text-sm">
                         <thead className="bg-gray-50">
@@ -314,7 +353,21 @@ const KMeansResults: React.FC<{
             {/* 데이터 테이블 (클러스터 포함 여부 및 거리 추가) */}
             {trainingData && trainingData.rows && trainingData.rows.length > 0 && (
                 <div>
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3">학습 데이터 (클러스터 할당 포함)</h3>
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-lg font-semibold text-gray-800">학습 데이터 (클러스터 할당 포함)</h3>
+                        <TableDownloadButton
+                            filename={`${baseName}_학습데이터_클러스터할당`}
+                            columns={[...trainingData.columns, '클러스터', '중심점 거리']}
+                            rows={trainingData.rows.map((row, rowIdx) => {
+                                const cluster = clusterAssignments[rowIdx];
+                                const distance = centroids[cluster]
+                                    ? calculateDistance(row as Record<string, number>, centroids[cluster], featureColumns)
+                                    : null;
+                                return { ...row, '클러스터': `Cluster ${cluster}`, '중심점 거리': distance };
+                            })}
+                            title="전체 행 CSV 다운로드"
+                        />
+                    </div>
                     <div className="overflow-x-auto border border-gray-200 rounded-lg" style={{ maxHeight: '400px' }}>
                         <table className="min-w-full text-sm">
                             <thead className="bg-gray-50 sticky top-0">
@@ -369,7 +422,8 @@ const PCAResults: React.FC<{
     moduleId: string;
     modules: CanvasModule[];
     connections: Connection[];
-}> = ({ output, inputData, moduleId, modules, connections }) => {
+    baseName: string;
+}> = ({ output, inputData, moduleId, modules, connections, baseName }) => {
     const explainedVarianceRatio = output.explainedVarianceRatio || [];
     const components = output.components || [];
     const mean = output.mean || [];
@@ -684,7 +738,18 @@ const PCAResults: React.FC<{
 
             {/* 주성분 계수 행렬 */}
             <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-3">주성분 계수 (Loading Matrix)</h3>
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-800">주성분 계수 (Loading Matrix)</h3>
+                    <TableDownloadButton
+                        filename={`${baseName}_주성분계수`}
+                        columns={['원본변수', ...Array.from({ length: nComponents }, (_, i) => `PC${i + 1}`)]}
+                        rows={featureColumns.map((col, colIdx) => {
+                            const r: Record<string, any> = { '원본변수': col };
+                            components.forEach((component, compIdx) => { r[`PC${compIdx + 1}`] = component[colIdx]; });
+                            return r;
+                        })}
+                    />
+                </div>
                 <div className="overflow-x-auto border border-gray-200 rounded-lg" style={{ maxHeight: '400px' }}>
                     <table className="min-w-full text-sm">
                         <thead className="bg-gray-50 sticky top-0">
@@ -794,6 +859,7 @@ export const TrainedClusteringModelPreviewModal: React.FC<TrainedClusteringModel
                             moduleId={module.id}
                             modules={modules}
                             connections={connections}
+                            baseName={module.name}
                         />
                     ) : (
                         <PCAResults
@@ -802,6 +868,7 @@ export const TrainedClusteringModelPreviewModal: React.FC<TrainedClusteringModel
                             moduleId={module.id}
                             modules={modules}
                             connections={connections}
+                            baseName={module.name}
                         />
                     )}
                 </div>

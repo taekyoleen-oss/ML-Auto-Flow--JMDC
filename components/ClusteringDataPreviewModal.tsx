@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { CanvasModule, ClusteringDataOutput, TrainedClusteringModelOutput, DataPreview, Connection, ModuleType } from '../types';
 import { XCircleIcon } from './icons';
 import { ClusterScatterPlot, useCluster2DProjection, pickNumericFeatures } from './ClusterScatterPlot';
+import { TableDownloadButton } from './TableDownloadButton';
 
 interface ClusteringDataPreviewModalProps {
     module: CanvasModule;
@@ -188,7 +189,8 @@ const KMeansClusteringView: React.FC<{
     output: ClusteringDataOutput;
     trainedModel: TrainedClusteringModelOutput | null;
     originalData: DataPreview | null;
-}> = ({ output, trainedModel, originalData }) => {
+    baseName: string;
+}> = ({ output, trainedModel, originalData, baseName }) => {
     const clusteredData = output.clusteredData;
     const centroids = trainedModel?.centroids || [];
     const featureColumns = trainedModel?.featureColumns || [];
@@ -433,9 +435,24 @@ const KMeansClusteringView: React.FC<{
                     <h3 className="text-lg font-semibold text-gray-800 mb-3">클러스터별 통계량</h3>
                     {clusterStats.map((stats, clusterIdx) => (
                         <div key={clusterIdx} className="mb-4">
-                            <h4 className="text-md font-semibold text-gray-700 mb-2">
-                                Cluster {clusterIdx} (n={clusterCounts[clusterIdx] || 0})
-                            </h4>
+                            <div className="flex items-center justify-between mb-2">
+                                <h4 className="text-md font-semibold text-gray-700">
+                                    Cluster {clusterIdx} (n={clusterCounts[clusterIdx] || 0})
+                                </h4>
+                                <TableDownloadButton
+                                    filename={`${baseName}_cluster${clusterIdx}_통계량`}
+                                    columns={['특성', '평균', '표준편차', '최소값', '최대값']}
+                                    rows={featureColumns
+                                        .filter(col => stats[col])
+                                        .map(col => ({
+                                            '특성': col,
+                                            '평균': stats[col].mean,
+                                            '표준편차': stats[col].std,
+                                            '최소값': stats[col].min,
+                                            '최대값': stats[col].max,
+                                        }))}
+                                />
+                            </div>
                             <div className="overflow-x-auto border border-gray-200 rounded-lg">
                                 <table className="min-w-full text-sm">
                                     <thead className="bg-gray-50">
@@ -472,7 +489,18 @@ const KMeansClusteringView: React.FC<{
             {/* 클러스터 간 거리 */}
             {centroidDistances.length > 0 && (
                 <div>
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3">클러스터 간 거리</h3>
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-lg font-semibold text-gray-800">클러스터 간 거리</h3>
+                        <TableDownloadButton
+                            filename={`${baseName}_클러스터간거리`}
+                            columns={['클러스터', ...centroids.map((_, idx) => `Cluster ${idx}`)]}
+                            rows={centroidDistances.map((row, idx) => {
+                                const r: Record<string, any> = { '클러스터': `Cluster ${idx}` };
+                                row.forEach((distance, colIdx) => { r[`Cluster ${colIdx}`] = distance; });
+                                return r;
+                            })}
+                        />
+                    </div>
                     <div className="overflow-x-auto border border-gray-200 rounded-lg">
                         <table className="min-w-full text-sm">
                             <thead className="bg-gray-50">
@@ -502,7 +530,15 @@ const KMeansClusteringView: React.FC<{
 
             {/* 데이터 테이블 (클러스터 포함) */}
             <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-3">클러스터링된 데이터</h3>
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-800">클러스터링된 데이터</h3>
+                    <TableDownloadButton
+                        filename={`${baseName}_클러스터링데이터`}
+                        columns={clusteredData.columns}
+                        rows={clusteredData.rows}
+                        title="전체 행 CSV 다운로드"
+                    />
+                </div>
                 <div className="overflow-x-auto border border-gray-200 rounded-lg" style={{ maxHeight: '400px' }}>
                     <table className="min-w-full text-sm">
                         <thead className="bg-gray-50 sticky top-0">
@@ -546,7 +582,8 @@ const PCAClusteringView: React.FC<{
     output: ClusteringDataOutput;
     trainedModel: TrainedClusteringModelOutput | null;
     originalData: DataPreview | null;
-}> = ({ output, trainedModel, originalData }) => {
+    baseName: string;
+}> = ({ output, trainedModel, originalData, baseName }) => {
     const clusteredData = output.clusteredData;
     const explainedVarianceRatio = trainedModel?.explainedVarianceRatio || [];
     const components = trainedModel?.components || [];
@@ -823,7 +860,18 @@ const PCAClusteringView: React.FC<{
 
             {/* 설명된 분산 비율 */}
             <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-3">설명된 분산 비율</h3>
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-800">설명된 분산 비율</h3>
+                    <TableDownloadButton
+                        filename={`${baseName}_설명된분산비율`}
+                        columns={['주성분', '분산비율(%)', '누적분산(%)']}
+                        rows={explainedVarianceRatio.map((ratio, idx) => ({
+                            '주성분': `PC${idx + 1}`,
+                            '분산비율(%)': ratio * 100,
+                            '누적분산(%)': explainedVarianceRatio.slice(0, idx + 1).reduce((a, b) => a + b, 0) * 100,
+                        }))}
+                    />
+                </div>
                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                     <div className="grid grid-cols-2 gap-4 mb-4">
                         <div>
@@ -878,7 +926,18 @@ const PCAClusteringView: React.FC<{
             {/* 주성분 계수 행렬 */}
             {components.length > 0 && featureColumns.length > 0 && (
                 <div>
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3">주성분 계수 (Loading Matrix)</h3>
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-lg font-semibold text-gray-800">주성분 계수 (Loading Matrix)</h3>
+                        <TableDownloadButton
+                            filename={`${baseName}_주성분계수`}
+                            columns={['원본변수', ...Array.from({ length: nComponents }, (_, i) => `PC${i + 1}`)]}
+                            rows={featureColumns.map((col, colIdx) => {
+                                const r: Record<string, any> = { '원본변수': col };
+                                components.forEach((component, compIdx) => { r[`PC${compIdx + 1}`] = component[colIdx]; });
+                                return r;
+                            })}
+                        />
+                    </div>
                     <div className="overflow-x-auto border border-gray-200 rounded-lg" style={{ maxHeight: '400px' }}>
                         <table className="min-w-full text-sm">
                             <thead className="bg-gray-50 sticky top-0">
@@ -908,7 +967,15 @@ const PCAClusteringView: React.FC<{
 
             {/* 변환된 데이터 테이블 */}
             <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-3">변환된 데이터 (주성분 공간)</h3>
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-800">변환된 데이터 (주성분 공간)</h3>
+                    <TableDownloadButton
+                        filename={`${baseName}_변환된데이터`}
+                        columns={clusteredData.columns}
+                        rows={clusteredData.rows}
+                        title="전체 행 CSV 다운로드"
+                    />
+                </div>
                 <div className="overflow-x-auto border border-gray-200 rounded-lg" style={{ maxHeight: '400px' }}>
                     <table className="min-w-full text-sm">
                         <thead className="bg-gray-50 sticky top-0">
@@ -1050,6 +1117,7 @@ export const ClusteringDataPreviewModal: React.FC<ClusteringDataPreviewModalProp
                             output={output}
                             trainedModel={trainedModel}
                             originalData={originalData}
+                            baseName={module.name}
                         />
                     ) : (
                         // KMeans · DBSCAN · 계층형(transductive) 모두 클러스터 할당 뷰 사용
@@ -1057,6 +1125,7 @@ export const ClusteringDataPreviewModal: React.FC<ClusteringDataPreviewModalProp
                             output={output}
                             trainedModel={trainedModel}
                             originalData={originalData}
+                            baseName={module.name}
                         />
                     )}
                 </div>

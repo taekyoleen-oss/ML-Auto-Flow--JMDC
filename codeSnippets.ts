@@ -1415,6 +1415,7 @@ from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
     mean_squared_error, mean_absolute_error, r2_score,
     roc_auc_score, average_precision_score,
+    confusion_matrix, roc_curve,
 )
 import pandas as pd
 import numpy as np
@@ -1502,6 +1503,78 @@ if p_model_type == 'classification':
         print(f"  Average Precision (PR-AUC): {avg_precision:.6f}")
     else:
         print("  Average Precision (PR-AUC): N/A (binary probability scores required)")
+
+    # --- Threshold sweep + ROC curve (binary only, deterministic) ---
+    # 양성 클래스 점수(pos_score)와 이진 정답(y_bin)을 결정적 우선순위로 확보한다.
+    #   ① scored_data에 '*_Predict_Proba_1'로 끝나는 단일 컬럼이 있으면 그것을 사용
+    #   ② 없으면 trained_model.predict_proba/decision_function에서 재도출
+    # 둘 다 없으면(하드 라벨·확률 미지원) 스윕/ROC는 N/A로 우아하게 생략(크래시 금지).
+    sweep_pos_score = None
+    sweep_y_bin = None
+    try:
+        classes_for_sweep = sorted(pd.unique(y_true).tolist())
+        if len(classes_for_sweep) == 2:
+            pos_label_sweep = classes_for_sweep[1]
+            sweep_y_bin = (np.asarray(y_true) == pos_label_sweep).astype(int)
+            # ① proba 컬럼 우선('*_Predict_Proba_1'로 끝나는 컬럼; 정렬 후 단일/첫 컬럼)
+            proba_cols = sorted([c for c in scored_data.columns if str(c).endswith('_Predict_Proba_1')])
+            if len(proba_cols) >= 1:
+                sweep_pos_score = np.asarray(scored_data[proba_cols[0]], dtype=float)
+            else:
+                # ② 모델에서 재도출(위 ROC-AUC 블록과 동일 규칙)
+                feat_cols_s = list(getattr(trained_model, 'feature_names_in_', []))
+                if not feat_cols_s:
+                    feat_cols_s = scored_data.select_dtypes(include=['number']).columns.tolist()
+                X_sweep = scored_data[feat_cols_s]
+                if hasattr(trained_model, 'predict_proba'):
+                    sc = np.asarray(trained_model.predict_proba(X_sweep))
+                    sweep_pos_score = sc[:, 1] if (sc.ndim == 2 and sc.shape[1] >= 2) else sc.ravel()
+                elif hasattr(trained_model, 'decision_function'):
+                    sweep_pos_score = np.asarray(trained_model.decision_function(X_sweep)).ravel()
+    except Exception:
+        sweep_pos_score = None
+        sweep_y_bin = None
+
+    if sweep_pos_score is not None and sweep_y_bin is not None:
+        # Threshold sweep: 0.00~1.00을 0.05 간격으로(결정적), 각 임계값의 acc/prec/rec/f1 + 혼동행렬.
+        # proba가 아닌 decision_function 점수면 0~1 범위를 벗어날 수 있으나, 표는 점수 자체에 임계값을
+        # 적용하므로 동일하게 결정적이다(점수 분포는 모델·데이터 고정 시 불변).
+        print("  Threshold sweep (binary; pos-class score >= threshold):")
+        print("    threshold  accuracy  precision    recall  f1_score      tp      fp      tn      fn")
+        sweep_rows = []
+        for th in np.arange(0.0, 1.0001, 0.05):
+            th = float(round(th, 2))
+            y_pred_th = (sweep_pos_score >= th).astype(int)
+            acc_th = float(accuracy_score(sweep_y_bin, y_pred_th))
+            prec_th = float(precision_score(sweep_y_bin, y_pred_th, average='binary', zero_division=0))
+            rec_th = float(recall_score(sweep_y_bin, y_pred_th, average='binary', zero_division=0))
+            f1_th = float(f1_score(sweep_y_bin, y_pred_th, average='binary', zero_division=0))
+            cm_th = confusion_matrix(sweep_y_bin, y_pred_th, labels=[0, 1])
+            tn_th = int(cm_th[0, 0]); fp_th = int(cm_th[0, 1])
+            fn_th = int(cm_th[1, 0]); tp_th = int(cm_th[1, 1])
+            sweep_rows.append({
+                'threshold': th, 'accuracy': acc_th, 'precision': prec_th,
+                'recall': rec_th, 'f1_score': f1_th,
+                'tp': tp_th, 'fp': fp_th, 'tn': tn_th, 'fn': fn_th,
+            })
+            print(f"    {th:9.2f}  {acc_th:8.6f}  {prec_th:9.6f}  {rec_th:8.6f}  {f1_th:8.6f}  {tp_th:6d}  {fp_th:6d}  {tn_th:6d}  {fn_th:6d}")
+        evaluation_metrics['threshold_sweep'] = sweep_rows
+
+        # ROC 곡선: roc_curve로 (fpr, tpr, 임계값) 산출(결정적). 점이 많으면 균등 다운샘플(최대 21점).
+        fpr, tpr, roc_thr = roc_curve(sweep_y_bin, sweep_pos_score)
+        n_pts = len(fpr)
+        if n_pts > 21:
+            idx = np.unique(np.linspace(0, n_pts - 1, 21).astype(int))
+        else:
+            idx = np.arange(n_pts)
+        roc_points = [(float(fpr[i]), float(tpr[i])) for i in idx]
+        evaluation_metrics['roc_curve'] = roc_points
+        roc_auc_label = f"{roc_auc:.6f}" if roc_auc is not None else "N/A"
+        print(f"  ROC curve (fpr, tpr) — {len(roc_points)} points, AUC={roc_auc_label}:")
+        for fx, tx in roc_points:
+            print(f"    fpr={fx:.6f}  tpr={tx:.6f}")
+    else:
+        print("  Threshold sweep / ROC: N/A (probability scores unavailable)")
 
 else:  # regression
     # Regression metrics

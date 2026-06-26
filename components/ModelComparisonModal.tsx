@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { CanvasModule, TrainedModelOutput, EvaluationOutput } from '../types';
 import { XCircleIcon } from './icons';
+import { TableDownloadButton } from './TableDownloadButton';
 
 interface ModelComparisonModalProps {
     modules: CanvasModule[];
@@ -164,9 +165,28 @@ export const ModelComparisonModal: React.FC<ModelComparisonModalProps> = ({ modu
                             {models.length}개 모델 · 지표 헤더를 클릭하면 정렬됩니다 · 파란 배경 = 최우수값
                         </p>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors">
-                        <XCircleIcon className="w-6 h-6" />
-                    </button>
+                    <div className="flex items-center gap-3">
+                        <TableDownloadButton
+                            filename="모델비교"
+                            columns={['모듈 이름', '소스', '유형', ...allMetricKeys]}
+                            rows={sortedModels.map(model => {
+                                const r: Record<string, any> = {
+                                    '모듈 이름': model.name,
+                                    '소스': model.source === 'evaluation' ? 'EvaluateModel' : 'TrainModel',
+                                    '유형': model.purpose === 'classification' ? '분류' : '회귀',
+                                };
+                                allMetricKeys.forEach(k => {
+                                    const v = model.metrics[k];
+                                    r[k] = v === undefined || v === null ? '' : v;
+                                });
+                                return r;
+                            })}
+                            title="모델 비교표 CSV 다운로드"
+                        />
+                        <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors">
+                            <XCircleIcon className="w-6 h-6" />
+                        </button>
+                    </div>
                 </div>
 
                 {/* 테이블 */}

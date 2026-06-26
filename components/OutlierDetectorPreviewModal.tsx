@@ -5,6 +5,7 @@ import { ApiKeyMissingError } from '../lib/aiClient';
 import { explainModuleResult } from '../lib/aiHelpers';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
+import { TableDownloadButton } from './TableDownloadButton';
 
 interface OutlierDetectorPreviewModalProps {
     module: CanvasModule;
@@ -303,7 +304,19 @@ export const OutlierDetectorPreviewModal: React.FC<OutlierDetectorPreviewModalPr
                                         <h3 className="text-lg font-bold text-gray-800">
                                             Selected Outliers ({selectedIndices.size})
                                         </h3>
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-2 items-center">
+                                            <TableDownloadButton
+                                                filename={`${module.name}_${activeTab}_이상치목록`}
+                                                columns={['Index', 'Value', 'Method']}
+                                                rows={(Array.from(selectedIndices) as number[]).sort((a, b) => a - b).map((idx: number) => {
+                                                    const methodResult = currentColumnResult.results.find(r => r.outlierIndices.includes(idx));
+                                                    return {
+                                                        Index: idx,
+                                                        Value: getColumnValue(idx, activeTab),
+                                                        Method: methodResult?.method || 'Multiple',
+                                                    };
+                                                })}
+                                            />
                                             <button
                                                 onClick={handleRemoveSelected}
                                                 className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"

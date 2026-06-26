@@ -5,6 +5,7 @@ import { ApiKeyMissingError } from '../lib/aiClient';
 import { explainModuleResult } from '../lib/aiHelpers';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
+import { TableDownloadButton } from './TableDownloadButton';
 
 interface NormalityCheckerPreviewModalProps {
     module: CanvasModule;
@@ -190,7 +191,18 @@ export const NormalityCheckerPreviewModal: React.FC<NormalityCheckerPreviewModal
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 {/* Left: Statistics Table */}
                                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                                    <h3 className="text-md font-bold text-gray-800 mb-4">Statistics</h3>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-md font-bold text-gray-800">Statistics</h3>
+                                        <TableDownloadButton
+                                            filename={`${module.name}_${column}_정규성통계량`}
+                                            columns={['Measure', 'Value']}
+                                            rows={[
+                                                { Measure: 'Skewness', Value: skewness },
+                                                { Measure: 'Kurtosis', Value: kurtosis },
+                                                { Measure: 'Jarque-Bera Statistic', Value: jarqueBera.statistic },
+                                            ]}
+                                        />
+                                    </div>
                                     <table className="w-full text-sm">
                                         <thead>
                                             <tr className="border-b border-gray-300">
@@ -226,7 +238,29 @@ export const NormalityCheckerPreviewModal: React.FC<NormalityCheckerPreviewModal
 
                                 {/* Right: Test Results */}
                                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                                    <h3 className="text-md font-bold text-gray-800 mb-4">Test Results</h3>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-md font-bold text-gray-800">Test Results</h3>
+                                        <TableDownloadButton
+                                            filename={`${module.name}_${column}_정규성검정결과`}
+                                            columns={['검정', '통계량', 'p값', '임계값', '결론']}
+                                            rows={[
+                                                {
+                                                    '검정': 'Jarque-Bera Test',
+                                                    '통계량': jarqueBera.statistic,
+                                                    'p값': jarqueBera.pValue,
+                                                    '임계값': '',
+                                                    '결론': jarqueBera.conclusion ?? '',
+                                                },
+                                                ...(testResults || []).map(test => ({
+                                                    '검정': test.testName,
+                                                    '통계량': test.statistic,
+                                                    'p값': test.pValue,
+                                                    '임계값': test.criticalValue,
+                                                    '결론': test.conclusion ?? '',
+                                                })),
+                                            ]}
+                                        />
+                                    </div>
                                     <div className="space-y-3">
                                         {/* Jarque-Bera Test */}
                                         <div className="bg-white rounded p-3 border border-gray-200">

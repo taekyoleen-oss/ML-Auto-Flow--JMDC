@@ -7,6 +7,7 @@ import {
   ModuleType,
 } from "../types";
 import { XCircleIcon } from "./icons";
+import { TableDownloadButton } from "./TableDownloadButton";
 
 interface PredictModelPreviewModalProps {
   module: CanvasModule;
@@ -510,7 +511,15 @@ export const PredictModelPreviewModal: React.FC<
           {activeTab === "detail" && (
             <div className="space-y-4">
               <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="text-lg font-bold mb-2">데이터 미리보기</h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-lg font-bold">데이터 미리보기</h3>
+                  <TableDownloadButton
+                    filename={`${module.name}_예측결과`}
+                    columns={output.columns}
+                    rows={rows}
+                    title="전체 행 CSV 다운로드"
+                  />
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
                     <thead>

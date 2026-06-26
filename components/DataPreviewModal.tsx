@@ -26,6 +26,7 @@ import { GoogleGenAI } from "@google/genai";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { SpreadViewModal } from "./SpreadViewModal";
 import { DataOverviewPanel } from "./DataOverviewPanel";
+import { TableDownloadButton } from "./TableDownloadButton";
 
 interface DataPreviewModalProps {
     module: CanvasModule;
@@ -767,7 +768,8 @@ const PrepMissingProcessingInfo: React.FC<{
   outputData: DataPreview | null;
   modules: CanvasModule[];
   connections: Connection[];
-}> = ({ module, inputData, outputData }) => {
+  baseName: string;
+}> = ({ module, inputData, outputData, baseName }) => {
   const { method, strategy, n_neighbors, columnSelections } = module.parameters;
   const selectedColumns = React.useMemo(() => {
     if (!inputData || !Array.isArray(inputData.columns)) return [];
@@ -918,6 +920,31 @@ const PrepMissingProcessingInfo: React.FC<{
           </div>
         </div>
 
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold text-gray-700">처리 상세</h3>
+          <TableDownloadButton
+            filename={`${baseName}_결측치처리`}
+            columns={
+              method === "remove_row"
+                ? ["Column", "Processing", "Removed Rows"]
+                : method === "impute"
+                ? ["Column", "Processing", "Imputed Count", "Imputed Value"]
+                : ["Column", "Processing"]
+            }
+            rows={processingInfo.map((item) => {
+              const base: Record<string, any> = {
+                Column: item.column,
+                Processing: item.method,
+              };
+              if (method === "remove_row") base["Removed Rows"] = item.removedRows ?? 0;
+              if (method === "impute") {
+                base["Imputed Count"] = item.imputedCount ?? "";
+                base["Imputed Value"] = item.imputedValue ?? "";
+              }
+              return base;
+            })}
+          />
+        </div>
         <div className="border border-gray-200 rounded-lg overflow-hidden">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50">
@@ -978,7 +1005,8 @@ const PrepEncodeProcessingInfo: React.FC<{
   module: CanvasModule;
   inputData: DataPreview | null;
   outputData: DataPreview | null;
-}> = ({ module, inputData, outputData }) => {
+  baseName: string;
+}> = ({ module, inputData, outputData, baseName }) => {
   const { method, columns: targetColumns } = module.parameters;
 
   const encodingInfo = useMemo(() => {
@@ -1075,6 +1103,19 @@ const PrepEncodeProcessingInfo: React.FC<{
           </div>
         </div>
 
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold text-gray-700">인코딩 상세</h3>
+          <TableDownloadButton
+            filename={`${baseName}_인코딩`}
+            columns={["Column", "Method", "Before", "After"]}
+            rows={encodingInfo.info.map((item) => ({
+              Column: item.column,
+              Method: item.method,
+              Before: item.before,
+              After: item.after,
+            }))}
+          />
+        </div>
         <div className="border border-gray-200 rounded-lg overflow-hidden">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50">
@@ -1107,6 +1148,23 @@ const PrepEncodeProcessingInfo: React.FC<{
         </div>
 
         {/* 기존 열 및 변경하고자 하는 열 테이블 */}
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold text-gray-700">열 매핑</h3>
+          <TableDownloadButton
+            filename={`${baseName}_인코딩_열매핑`}
+            columns={["기존 열", "변경하고자 하는 열"]}
+            rows={encodingInfo.selectedColumns.flatMap((col) => {
+              const newCols = encodingInfo.columnToNewColumns?.[col] || [];
+              if (newCols.length > 0) {
+                return newCols.map((newCol) => ({
+                  "기존 열": col,
+                  "변경하고자 하는 열": newCol,
+                }));
+              }
+              return [{ "기존 열": col, "변경하고자 하는 열": "-" }];
+            })}
+          />
+        </div>
         <div className="border border-gray-200 rounded-lg overflow-hidden">
           <table className="min-w-full text-sm border-collapse">
             <thead className="bg-gray-50">
@@ -1185,7 +1243,8 @@ const PrepNormalizeProcessingInfo: React.FC<{
   module: CanvasModule;
   inputData: DataPreview | null;
   outputData: DataPreview | null;
-}> = ({ module, inputData, outputData }) => {
+  baseName: string;
+}> = ({ module, inputData, outputData, baseName }) => {
   const { method, columnSelections } = module.parameters;
 
   const normalizeInfo = useMemo(() => {
@@ -1389,6 +1448,40 @@ const PrepNormalizeProcessingInfo: React.FC<{
           </div>
         </div>
 
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold text-gray-700">정규화 상세</h3>
+          <TableDownloadButton
+            filename={`${baseName}_정규화`}
+            columns={
+              method === "MinMax"
+                ? ["Column", "Method", "Min", "Max"]
+                : method === "StandardScaler"
+                ? ["Column", "Method", "Mean", "Std Dev"]
+                : method === "RobustScaler"
+                ? ["Column", "Method", "Median", "Q1", "Q3", "IQR"]
+                : ["Column", "Method"]
+            }
+            rows={normalizeInfo.map((item) => {
+              const base: Record<string, any> = {
+                Column: item.column,
+                Method: item.method,
+              };
+              if (method === "MinMax") {
+                base["Min"] = item.params.min;
+                base["Max"] = item.params.max;
+              } else if (method === "StandardScaler") {
+                base["Mean"] = item.params.mean;
+                base["Std Dev"] = item.params.stdDev;
+              } else if (method === "RobustScaler") {
+                base["Median"] = item.params.median;
+                base["Q1"] = item.params.q1;
+                base["Q3"] = item.params.q3;
+                base["IQR"] = item.params.iqr;
+              }
+              return base;
+            })}
+          />
+        </div>
         <div className="border border-gray-200 rounded-lg overflow-hidden">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50">
@@ -1934,6 +2027,13 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
     joinConcatCurrent.rows,
   ]);
 
+  // 메인 데이터 테이블에 표시되는 컬럼(현재 탭 기준). CSV 다운로드용으로도 사용.
+  const displayedColumns = isJoinConcatModule
+    ? joinConcatCurrent.columns
+    : isPrepModule && prepTab !== "processing"
+    ? currentColumns
+    : columns;
+
     const requestSort = (key: string) => {
     let direction: "ascending" | "descending" = "ascending";
     if (
@@ -2374,6 +2474,7 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
                     outputData={data}
                     modules={modules}
                     connections={connections}
+                    baseName={module.name}
                   />
                 );
               } else if (module.type === ModuleType.EncodeCategorical) {
@@ -2382,6 +2483,7 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
                     module={module}
                     inputData={inputData}
                     outputData={data}
+                    baseName={module.name}
                   />
                 );
               } else if (module.type === ModuleType.ScalingTransform) {
@@ -2390,6 +2492,7 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
                     module={module}
                     inputData={inputData}
                     outputData={data}
+                    baseName={module.name}
                   />
                 );
               }
@@ -2463,9 +2566,21 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
             <div className="flex-grow flex flex-col gap-4">
               {module.outputData?.type === "VIFCheckerOutput" && (
                 <div className="w-full">
-                  <h3 className="text-lg font-semibold mb-4 text-gray-700">
-                    VIF (Variance Inflation Factor) Results
-                  </h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-700">
+                      VIF (Variance Inflation Factor) Results
+                    </h3>
+                    <TableDownloadButton
+                      filename={`${module.name}_VIF`}
+                      columns={["Column", "VIF Factor"]}
+                      rows={(module.outputData as VIFCheckerOutput).results.map(
+                        (result) => ({
+                          Column: result.column,
+                          "VIF Factor": result.vif,
+                        })
+                      )}
+                    />
+                  </div>
                   <div className="overflow-x-auto border border-gray-200 rounded-lg">
                     <table className="min-w-full text-sm">
                       <thead className="bg-gray-50 sticky top-0">
@@ -2703,7 +2818,16 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
               >
                             {/* Score Model인 경우 테이블만 표시 */}
                             {module.type === ModuleType.ScoreModel ? (
-                                <div className="w-full overflow-auto border border-gray-200 rounded-lg">
+                                <div className="w-full flex flex-col gap-2">
+                                  <div className="flex items-center justify-end">
+                                    <TableDownloadButton
+                                      filename={`${module.name}_데이터`}
+                                      columns={displayedColumns}
+                                      rows={sortedRows}
+                                      title="전체 행 CSV 다운로드"
+                                    />
+                                  </div>
+                                  <div className="w-full overflow-auto border border-gray-200 rounded-lg">
                                     <table className="min-w-full text-sm text-left">
                                         <thead className="bg-gray-50 sticky top-0">
                                             <tr>
@@ -2768,6 +2892,7 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
                                             ))}
                                         </tbody>
                                     </table>
+                                  </div>
                                 </div>
                             ) : (
                                 <>
@@ -2776,6 +2901,14 @@ export const DataPreviewModal: React.FC<DataPreviewModalProps> = ({
                         selectedColumnData ? "w-1/2" : "w-full"
                       } overflow-hidden flex flex-col`}
                     >
+                      <div className="flex items-center justify-end p-1.5 border-b border-gray-200 bg-gray-50/50">
+                        <TableDownloadButton
+                          filename={`${module.name}_데이터`}
+                          columns={displayedColumns}
+                          rows={sortedRows}
+                          title="전체 행 CSV 다운로드"
+                        />
+                      </div>
                       <div
                         className="overflow-y-auto overflow-x-auto"
                         style={{ maxHeight: "400px" }}

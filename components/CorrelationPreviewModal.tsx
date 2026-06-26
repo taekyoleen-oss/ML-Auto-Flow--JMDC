@@ -5,6 +5,7 @@ import { ApiKeyMissingError } from '../lib/aiClient';
 import { explainModuleResult } from '../lib/aiHelpers';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
+import { TableDownloadButton } from './TableDownloadButton';
 
 interface CorrelationPreviewModalProps {
     module: CanvasModule;
@@ -233,9 +234,19 @@ export const CorrelationPreviewModal: React.FC<CorrelationPreviewModalProps> = (
 
                         return (
                             <div>
-                                <h3 className="text-lg font-bold text-gray-800 mb-3">
-                                    {getMethodLabel(currentMatrix.method)} Matrix
-                                </h3>
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="text-lg font-bold text-gray-800">
+                                        {getMethodLabel(currentMatrix.method)} Matrix
+                                    </h3>
+                                    <TableDownloadButton
+                                        filename={`${module.name}_${currentMatrix.method}_상관행렬`}
+                                        columns={['변수', ...matrixColumns]}
+                                        rows={matrixColumns.map(rowCol => ({
+                                            '변수': rowCol,
+                                            ...Object.fromEntries(matrixColumns.map(colCol => [colCol, matrix[rowCol]?.[colCol]])),
+                                        }))}
+                                    />
+                                </div>
                                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 overflow-x-auto">
                                     <table className="min-w-full text-sm">
                                         <thead>

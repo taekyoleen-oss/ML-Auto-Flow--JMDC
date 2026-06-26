@@ -5,6 +5,7 @@ import { explainModuleResult } from '../lib/aiHelpers';
 import { ApiKeyMissingError } from '../lib/aiClient';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
+import { TableDownloadButton } from './TableDownloadButton';
 
 // C-1: 인터랙티브 메트릭 바 차트
 const MetricBarChart: React.FC<{ metrics: Record<string, number | string>; modelType: 'classification' | 'regression' }> = ({ metrics, modelType }) => {
@@ -131,20 +132,23 @@ export const EvaluationPreviewModal: React.FC<EvaluationPreviewModalProps> = ({
         { value: 'f1Score', label: 'F1-Score' }
     ];
 
-    // thresholdMetrics를 테이블 형식으로 변환
-    const thresholdTable: ThresholdTableRow[] = outputThresholdMetrics && outputThresholdMetrics.length > 0
-        ? outputThresholdMetrics.map(m => ({
-            threshold: m.threshold,
-            accuracy: m.accuracy,
-            precision: m.precision,
-            recall: m.recall,
-            f1Score: m.f1Score,
-            tp: m.tp,
-            fp: m.fp,
-            tn: m.tn,
-            fn: m.fn
-        }))
-        : [];
+    // thresholdMetrics를 테이블 형식으로 변환 (useMemo로 참조 안정화 — 매 렌더 새 배열 생성 시
+    // 아래 effect deps가 매번 바뀌어 setState→재렌더 무한 루프가 발생하던 것을 방지)
+    const thresholdTable: ThresholdTableRow[] = useMemo(() => (
+        outputThresholdMetrics && outputThresholdMetrics.length > 0
+            ? outputThresholdMetrics.map(m => ({
+                threshold: m.threshold,
+                accuracy: m.accuracy,
+                precision: m.precision,
+                recall: m.recall,
+                f1Score: m.f1Score,
+                tp: m.tp,
+                fp: m.fp,
+                tn: m.tn,
+                fn: m.fn
+            }))
+            : []
+    ), [outputThresholdMetrics]);
 
     // 선택된 threshold에 해당하는 행 찾기
     useEffect(() => {
@@ -154,11 +158,14 @@ export const EvaluationPreviewModal: React.FC<EvaluationPreviewModalProps> = ({
                 setSelectedRow(row);
             } else {
                 // 가장 가까운 threshold 찾기
-                const closest = thresholdTable.reduce((prev, curr) => 
+                const closest = thresholdTable.reduce((prev, curr) =>
                     Math.abs(curr.threshold - selectedThreshold) < Math.abs(prev.threshold - selectedThreshold) ? curr : prev
                 );
                 setSelectedRow(closest);
-                setSelectedThreshold(closest.threshold);
+                // 실제로 값이 달라질 때만 갱신(동일 값 setState로 인한 재렌더 루프 방지)
+                if (Math.abs(closest.threshold - selectedThreshold) > 0.001) {
+                    setSelectedThreshold(closest.threshold);
+                }
             }
         } else if (modelType === 'classification' && confusionMatrix) {
             // thresholdMetrics가 없으면 현재 metrics 사용
@@ -474,8 +481,8 @@ export const EvaluationPreviewModal: React.FC<EvaluationPreviewModalProps> = ({
                         </div>
                     )}
 
-                    {/* Performance Metrics - 선택된 threshold의 통계량 표시 */}
-                    {modelType === 'classification' && selectedRow && (
+                    {/* Performance Metrics - 선택된 threshold의 통계량 표시 (스윕이 있을 때만; 없으면 아래 폴백 1곳에서만 표시해 중복 방지) */}
+                    {modelType === 'classification' && selectedRow && thresholdTable.length > 0 && (
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                             <h3 className="text-lg font-semibold text-gray-700 mb-4 text-center">
                                 Selected Threshold: {selectedRow.threshold.toFixed(2)}
@@ -593,9 +600,26 @@ export const EvaluationPreviewModal: React.FC<EvaluationPreviewModalProps> = ({
                                     <div className="flex gap-4">
                                         {/* Left: Threshold Table */}
                                         <div className="flex-1 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                                            <h3 className="text-lg font-semibold text-gray-700 mb-4 text-center">
-                                                Threshold Statistics Table
-                                            </h3>
+                                            <div className="flex items-center justify-between mb-4">
+                                                <h3 className="text-lg font-semibold text-gray-700">
+                                                    Threshold Statistics Table
+                                                </h3>
+                                                <TableDownloadButton
+                                                    filename={`${module.name}_임계값통계`}
+                                                    columns={['Threshold', 'Accuracy', 'Precision', 'Recall', 'F1-Score', 'TP', 'FP', 'TN', 'FN']}
+                                                    rows={thresholdTable.map(row => ({
+                                                        'Threshold': row.threshold,
+                                                        'Accuracy': row.accuracy,
+                                                        'Precision': row.precision,
+                                                        'Recall': row.recall,
+                                                        'F1-Score': row.f1Score,
+                                                        'TP': row.tp,
+                                                        'FP': row.fp,
+                                                        'TN': row.tn,
+                                                        'FN': row.fn,
+                                                    }))}
+                                                />
+                                            </div>
                                             <div className="overflow-x-auto max-h-[500px]">
                                                 <table className="w-full border-collapse text-sm">
                                                     <thead className="bg-gray-100 sticky top-0">
@@ -868,9 +892,19 @@ export const EvaluationPreviewModal: React.FC<EvaluationPreviewModalProps> = ({
                             {/* Confusion Matrix Table - 선택된 threshold의 혼동행렬 */}
                             {selectedRow && (
                                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                                    <h3 className="text-lg font-semibold text-gray-700 mb-4 text-center">
-                                        Confusion Matrix (Threshold: {selectedRow.threshold.toFixed(2)})
-                                    </h3>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-lg font-semibold text-gray-700">
+                                            Confusion Matrix{thresholdTable.length > 0 ? ` (Threshold: ${selectedRow.threshold.toFixed(2)})` : ''}
+                                        </h3>
+                                        <TableDownloadButton
+                                            filename={`${module.name}_혼동행렬_threshold${selectedRow.threshold.toFixed(2)}`}
+                                            columns={['', 'Predicted: 0', 'Predicted: 1']}
+                                            rows={[
+                                                { '': 'Actual: 0', 'Predicted: 0': selectedRow.tn, 'Predicted: 1': selectedRow.fp },
+                                                { '': 'Actual: 1', 'Predicted: 0': selectedRow.fn, 'Predicted: 1': selectedRow.tp },
+                                            ]}
+                                        />
+                                    </div>
                                     <div className="overflow-x-auto">
                                         <table className="w-full border-collapse">
                                             <thead>
@@ -905,14 +939,6 @@ export const EvaluationPreviewModal: React.FC<EvaluationPreviewModalProps> = ({
                                                 </tr>
                                             </tbody>
                                         </table>
-                                    </div>
-                                    <div className="mt-4 text-sm text-gray-600">
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <div>TP (True Positive): {selectedRow.tp}</div>
-                                            <div>FP (False Positive): {selectedRow.fp}</div>
-                                            <div>TN (True Negative): {selectedRow.tn}</div>
-                                            <div>FN (False Negative): {selectedRow.fn}</div>
-                                        </div>
                                     </div>
                                 </div>
                             )}

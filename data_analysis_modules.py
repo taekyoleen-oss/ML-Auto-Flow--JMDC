@@ -1544,6 +1544,76 @@ def evaluate_model(model, df: pd.DataFrame, label_column: str, prediction_column
             metrics['average_precision'] = avg_precision
             print(f"평균 정밀도 (PR-AUC): {avg_precision:.4f}")
 
+        # --- Threshold 스윕 + ROC 곡선(이진 한정, 결정적) ---
+        # codeSnippets.ts EvaluateModel 템플릿과 정합. 양성 클래스 점수(pos_score)와
+        # 이진 정답(y_bin)을 결정적 우선순위로 확보한다:
+        #   ① df에 '*_Predict_Proba_1'로 끝나는 단일 컬럼이 있으면 그것을 사용
+        #   ② 없으면 model.predict_proba/decision_function에서 재도출
+        # 둘 다 없으면 스윕/ROC는 N/A로 우아하게 생략(크래시 금지).
+        from sklearn.metrics import roc_curve
+        sweep_pos_score = None
+        sweep_y_bin = None
+        try:
+            classes_for_sweep = sorted(pd.unique(y_true).tolist())
+            if len(classes_for_sweep) == 2:
+                pos_label_sweep = classes_for_sweep[1]
+                sweep_y_bin = (np.asarray(y_true) == pos_label_sweep).astype(int)
+                proba_cols = sorted([c for c in df.columns if str(c).endswith('_Predict_Proba_1')])
+                if len(proba_cols) >= 1:
+                    sweep_pos_score = np.asarray(df[proba_cols[0]], dtype=float)
+                else:
+                    feat_cols_s = feature_columns
+                    if not feat_cols_s:
+                        feat_cols_s = list(getattr(model, 'feature_names_in_', []))
+                    if not feat_cols_s:
+                        feat_cols_s = df.select_dtypes(include=[np.number]).columns.tolist()
+                    X_sweep = df[feat_cols_s]
+                    if hasattr(model, 'predict_proba'):
+                        sc = np.asarray(model.predict_proba(X_sweep))
+                        sweep_pos_score = sc[:, 1] if (sc.ndim == 2 and sc.shape[1] >= 2) else sc.ravel()
+                    elif hasattr(model, 'decision_function'):
+                        sweep_pos_score = np.asarray(model.decision_function(X_sweep)).ravel()
+        except Exception:
+            sweep_pos_score = None
+            sweep_y_bin = None
+
+        if sweep_pos_score is not None and sweep_y_bin is not None:
+            print("Threshold 스윕 (이진; 양성 점수 >= threshold):")
+            print("    threshold  accuracy  precision    recall  f1_score      tp      fp      tn      fn")
+            sweep_rows = []
+            for th in np.arange(0.0, 1.0001, 0.05):
+                th = float(round(th, 2))
+                y_pred_th = (sweep_pos_score >= th).astype(int)
+                acc_th = float(accuracy_score(sweep_y_bin, y_pred_th))
+                prec_th = float(precision_score(sweep_y_bin, y_pred_th, average='binary', zero_division=0))
+                rec_th = float(recall_score(sweep_y_bin, y_pred_th, average='binary', zero_division=0))
+                f1_th = float(f1_score(sweep_y_bin, y_pred_th, average='binary', zero_division=0))
+                cm_th = confusion_matrix(sweep_y_bin, y_pred_th, labels=[0, 1])
+                tn_th = int(cm_th[0, 0]); fp_th = int(cm_th[0, 1])
+                fn_th = int(cm_th[1, 0]); tp_th = int(cm_th[1, 1])
+                sweep_rows.append({
+                    'threshold': th, 'accuracy': acc_th, 'precision': prec_th,
+                    'recall': rec_th, 'f1_score': f1_th,
+                    'tp': tp_th, 'fp': fp_th, 'tn': tn_th, 'fn': fn_th,
+                })
+                print(f"    {th:9.2f}  {acc_th:8.6f}  {prec_th:9.6f}  {rec_th:8.6f}  {f1_th:8.6f}  {tp_th:6d}  {fp_th:6d}  {tn_th:6d}  {fn_th:6d}")
+            metrics['threshold_sweep'] = sweep_rows
+
+            fpr, tpr, roc_thr = roc_curve(sweep_y_bin, sweep_pos_score)
+            n_pts = len(fpr)
+            if n_pts > 21:
+                idx = np.unique(np.linspace(0, n_pts - 1, 21).astype(int))
+            else:
+                idx = np.arange(n_pts)
+            roc_points = [(float(fpr[i]), float(tpr[i])) for i in idx]
+            metrics['roc_curve'] = roc_points
+            roc_auc_label = f"{roc_auc:.6f}" if roc_auc is not None else "N/A"
+            print(f"ROC 곡선 (fpr, tpr) — {len(roc_points)} points, AUC={roc_auc_label}:")
+            for fx, tx in roc_points:
+                print(f"    fpr={fx:.6f}  tpr={tx:.6f}")
+        else:
+            print("Threshold 스윕 / ROC: N/A (확률 점수 사용 불가)")
+
     else:  # regression
         mse = mean_squared_error(y_true, y_pred)
         rmse = np.sqrt(mse)

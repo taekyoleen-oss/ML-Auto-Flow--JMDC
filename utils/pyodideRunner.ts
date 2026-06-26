@@ -5635,7 +5635,19 @@ if is_classification:
         # 이미 예측값인 경우 그대로 사용
         y_pred = y_pred_raw.astype(int)
         y_pred_proba = None
-    
+
+    # prediction_column이 하드 라벨(예: 'Predict')이라 y_pred_proba가 없을 때,
+    # ScoreModel이 생성한 '*_Predict_Proba_1' 양성 클래스 확률 컬럼이 df에 있으면
+    # 그것을 채택한다(결정적, 이진일 때만). 이러면 슬라이더/ROC/AUC 분기가 동작한다.
+    # 하드 라벨 메트릭(accuracy 등)은 그대로 두고 y_pred_proba만 가산적으로 보강.
+    if y_pred_proba is None:
+        _proba_cols = sorted([c for c in df.columns if str(c).endswith('_Predict_Proba_1')])
+        if len(np.unique(y_true)) == 2 and len(_proba_cols) >= 1:
+            try:
+                y_pred_proba = np.asarray(df[_proba_cols[0]].values, dtype=float)
+            except Exception:
+                y_pred_proba = None
+
     # 이진 분류인지 다중 분류인지 확인
     unique_labels = np.unique(y_true)
     is_binary = len(unique_labels) == 2

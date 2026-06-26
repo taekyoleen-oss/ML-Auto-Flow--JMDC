@@ -5,6 +5,7 @@ import { GoogleGenAI } from "@google/genai";
 import { getGeminiClient } from '../lib/aiClient';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
+import { TableDownloadButton } from './TableDownloadButton';
 
 interface StatsModelsResultPreviewModalProps {
     module: CanvasModule;
@@ -207,6 +208,22 @@ ${coefficientsText}
                         <hr className="my-4 border-gray-300"/>
 
                         <div>
+                            <div className="flex items-center justify-between mb-2 font-sans">
+                                <h4 className="text-sm font-semibold text-gray-700">계수 (Coefficients)</h4>
+                                <TableDownloadButton
+                                    filename={`${module.name}_계수`}
+                                    columns={['param', 'coef', 'std err', isOLS ? 't' : 'z', isOLS ? 'P>|t|' : 'P>|z|', '[0.025', '0.975]']}
+                                    rows={Object.entries(summary.coefficients).map(([param, values]) => ({
+                                        'param': param,
+                                        'coef': values.coef,
+                                        'std err': values['std err'],
+                                        [isOLS ? 't' : 'z']: (isOLS ? values.t : values.z) ?? 0,
+                                        [isOLS ? 'P>|t|' : 'P>|z|']: (isOLS ? values['P>|t|'] : values['P>|z|']) ?? 0,
+                                        '[0.025': values['[0.025'],
+                                        '0.975]': values['0.975]'],
+                                    }))}
+                                />
+                            </div>
                             <table className="w-full text-left">
                                 <thead>
                                     <tr className="border-b-2 border-gray-300">

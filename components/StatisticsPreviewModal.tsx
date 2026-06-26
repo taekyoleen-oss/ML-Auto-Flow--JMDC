@@ -7,6 +7,7 @@ import { explainModuleResult } from '../lib/aiHelpers';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { AdvancedOnly, ADVANCED_BTN_DIM, AdvancedLockBadge } from '../contexts/AdvancedFeatureContext';
 import { SpreadViewModal } from './SpreadViewModal';
+import { TableDownloadButton } from './TableDownloadButton';
 
 // C-3: 컬럼별 분포 미니 시각화 컴포넌트
 const DistributionSummary: React.FC<{ stats: StatisticsOutput['stats'] }> = ({ stats }) => {
@@ -504,7 +505,21 @@ ${correlationText}
                         <>
                             {/* Descriptive Statistics Section */}
                             <div>
-                                <h3 className="text-lg font-semibold mb-2 text-gray-700">Descriptive Statistics</h3>
+                                <div className="flex items-center justify-between mb-2">
+                                    <h3 className="text-lg font-semibold text-gray-700">Descriptive Statistics</h3>
+                                    <TableDownloadButton
+                                        filename={`${module.name}_기술통계량`}
+                                        columns={['Metric', ...(stats ? Object.keys(stats) : [])]}
+                                        rows={stats ? [
+                                            { Metric: 'Non-Null Count', ...Object.fromEntries(Object.keys(stats).map(col => [col, (stats[col] as any).nonNullCount])) },
+                                            { Metric: 'Dtype', ...Object.fromEntries(Object.keys(stats).map(col => [col, (stats[col] as any).dtype])) },
+                                            ...statDisplay.map(({ key, label }) => ({
+                                                Metric: label,
+                                                ...Object.fromEntries(Object.keys(stats).map(col => [col, (stats[col] as any)[key]])),
+                                            })),
+                                        ] : []}
+                                    />
+                                </div>
                                 <div className="overflow-x-auto border border-gray-200 rounded-lg">
                                     <table className="w-full text-sm text-left table-auto">
                                         <thead className="bg-gray-50">
@@ -572,7 +587,17 @@ ${correlationText}
                             {/* Correlation Analysis Section */}
                             {correlation && (
                                 <div>
-                                    <h3 className="text-lg font-semibold mb-2 text-gray-700">Correlation Analysis</h3>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <h3 className="text-lg font-semibold text-gray-700">Correlation Analysis</h3>
+                                        <TableDownloadButton
+                                            filename={`${module.name}_상관계수행렬`}
+                                            columns={['변수', ...Object.keys(correlation)]}
+                                            rows={Object.keys(correlation).map(rowCol => ({
+                                                '변수': rowCol,
+                                                ...Object.fromEntries(Object.keys(correlation).map(colCol => [colCol, correlation[rowCol]?.[colCol]])),
+                                            }))}
+                                        />
+                                    </div>
                                     <div className="overflow-x-auto border border-gray-200 rounded-lg">
                                         <CorrelationHeatmap matrix={correlation} />
                                     </div>

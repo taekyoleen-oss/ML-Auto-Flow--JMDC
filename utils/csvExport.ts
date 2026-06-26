@@ -5,6 +5,39 @@ interface CsvData {
   columns: Array<{ name: string; type?: string }>;
 }
 
+/** A column for a downloadable table: either a name string or an object with a `name`. */
+export type CsvColumn = { name: string; type?: string } | string;
+
+/** Sanitize an arbitrary label into a safe file base name (keeps Korean letters). */
+function safeFileName(baseName: string): string {
+  return (baseName || 'table').replace(/[^a-zA-Z0-9가-힣_-]/g, '_');
+}
+
+/**
+ * Generic, table-level CSV download. Accepts arbitrary columns + rows so any
+ * preview modal can give individual tables (data, stats, distance matrices, …)
+ * their own download button. UTF-8 BOM is prepended for Excel compatibility.
+ * No-op when there are no rows.
+ */
+export function downloadRowsAsCsv(
+  baseName: string,
+  columns: ReadonlyArray<CsvColumn>,
+  rows: ReadonlyArray<Record<string, any>>
+): void {
+  if (!rows || rows.length === 0) return;
+  const cols = columns.map(c => (typeof c === 'string' ? { name: c } : c));
+  const csv = toCsvString({ rows: rows as Record<string, any>[], columns: cols });
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${safeFileName(baseName)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 /** Check if module has SplitData output with separate train/test sets. */
 export function isSplitDataModule(module: CanvasModule): boolean {
   return (module.outputData as any)?.type === 'SplitDataOutput';
