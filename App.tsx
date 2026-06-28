@@ -12495,8 +12495,13 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
                     className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center gap-2 border-b border-gray-200 dark:border-gray-700"
                     type="button"
                   >
-                    <FolderOpenIcon className="w-4 h-4 text-blue-400" />
-                    <span>파일에서 불러오기</span>
+                    <FolderOpenIcon className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                    <span className="flex-1 min-w-0">
+                      <span className="block">파일에서 불러오기</span>
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                        내 PC의 저장 파일(.json) 열기
+                      </span>
+                    </span>
                   </button>
 
                   {/* 현재 모델 저장 (개인용) — 저장 옵션 모달(데이터 포함/제외·웹 등록·설명) */}
@@ -12510,11 +12515,16 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
                     className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center gap-2 border-b border-gray-200 dark:border-gray-700"
                     type="button"
                   >
-                    <PlusIcon className="w-4 h-4 text-blue-400" />
-                    <span>현재 모델 저장</span>
+                    <PlusIcon className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                    <span className="flex-1 min-w-0">
+                      <span className="block">현재 모델 저장</span>
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                        이 브라우저에 저장 · 아래 목록에 추가
+                      </span>
+                    </span>
                   </button>
 
-                  {/* 초기 화면으로 설정 */}
+                  {/* 시작 화면으로 지정(앱 시작 기본 모델) — 자동 복원되는 '마지막 작업'과 구분 */}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -12541,14 +12551,25 @@ Please analyze this dataset comprehensively and design an optimal pipeline.
                         "initialModel",
                         JSON.stringify(currentModel)
                       );
-                      addLog("SUCCESS", "초기 화면으로 설정되었습니다.");
+                      addLog(
+                        "SUCCESS",
+                        "시작 화면으로 지정되었습니다 (앱을 다시 열면 이 모델로 시작)."
+                      );
                       setIsMyWorkMenuOpen(false);
                     }}
                     className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer flex items-center gap-2 border-b border-gray-200 dark:border-gray-700"
                     type="button"
+                    title="앱을 다시 열 때 항상 이 모델로 시작합니다 (자동 복원되는 '마지막 작업'과 다름)"
                   >
-                    <StarIcon className="w-4 h-4 text-yellow-400" />
-                    <span className="text-green-400">초기 화면으로 설정</span>
+                    <StarIcon className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-green-600 dark:text-green-400">
+                        시작 화면으로 지정
+                      </span>
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                        앱을 다시 열 때 이 모델로 시작
+                      </span>
+                    </span>
                   </button>
 
                   {/* 구분선 */}
